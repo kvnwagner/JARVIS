@@ -8,6 +8,7 @@ from core.interfaces import EventBus
 from infrastructure.event_bus import InMemoryEventBus
 from infrastructure.logger import JarvisLogger, setup_logging
 from tools import ToolRegistry
+from tools.windows import WINDOWS_TOOLS
 
 
 class Container:
@@ -28,3 +29,7 @@ class Container:
 
         # 4. Tool Registry
         self.tool_registry = ToolRegistry(self.bus)
+
+        # 5. Registrar Windows Tools
+        for tool in WINDOWS_TOOLS:
+            self.tool_registry.register(tool)

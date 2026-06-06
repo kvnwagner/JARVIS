@@ -21,7 +21,7 @@ class VolumeControlTool(Tool):
         "Puede subir, bajar, silenciar o establecer un nivel exacto. "
         "Úsalo cuando el usuario pida cambiar el volumen, silenciar o aumentar el sonido."
     )
-    parameters = {
+    parameters_schema = {
         "type": "object",
         "properties": {
             "action": {

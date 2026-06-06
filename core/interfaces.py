@@ -14,10 +14,18 @@ from datetime import datetime
 
 @dataclass
 class ToolResult:
-    success: bool
-    output:  str
-    error:   Optional[str] = None
+    success:  bool
+    output:   str
+    error:    Optional[str] = None
     metadata: dict = field(default_factory=dict)
+
+    @staticmethod
+    def ok(output: str) -> "ToolResult":
+        return ToolResult(success=True, output=output)
+
+    @staticmethod
+    def fail(error: str) -> "ToolResult":
+        return ToolResult(success=False, output="", error=error)
 
 
 class Tool(ABC):
