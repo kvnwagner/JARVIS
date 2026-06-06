@@ -1,10 +1,32 @@
 """
 Tool: clipboard
 Lee o escribe texto en el portapapeles de Windows.
-Requiere: pip install pyperclip
+Usa win32clipboard para mayor compatibilidad con procesos en background.
+Requiere: pip install pywin32
 """
 
+import win32clipboard
+import win32con
 from core.interfaces import Tool, ToolResult
+
+
+def _read_clipboard() -> str:
+    win32clipboard.OpenClipboard()
+    try:
+        if win32clipboard.IsClipboardFormatAvailable(win32con.CF_UNICODETEXT):
+            return win32clipboard.GetClipboardData(win32con.CF_UNICODETEXT)
+        return ""
+    finally:
+        win32clipboard.CloseClipboard()
+
+
+def _write_clipboard(text: str) -> None:
+    win32clipboard.OpenClipboard()
+    try:
+        win32clipboard.EmptyClipboard()
+        win32clipboard.SetClipboardData(win32con.CF_UNICODETEXT, text)
+    finally:
+        win32clipboard.CloseClipboard()
 
 
 class ClipboardTool(Tool):
@@ -35,25 +57,15 @@ class ClipboardTool(Tool):
     }
 
     def execute(self, params: dict) -> ToolResult:
-        try:
-            import pyperclip
-        except ImportError:
-            return ToolResult.fail(
-                "pyperclip no está instalado. Ejecuta: pip install pyperclip"
-            )
-
         action = params.get("action", "").strip().lower()
 
         if action == "get":
             try:
-                content = pyperclip.paste()
+                content = _read_clipboard()
                 if not content:
                     return ToolResult.ok("El portapapeles está vacío.")
-                # Truncar si es muy largo
                 preview = content[:500] + ("..." if len(content) > 500 else "")
-                return ToolResult.ok(
-                    f"Portapapeles ({len(content)} caracteres):\n{preview}"
-                )
+                return ToolResult.ok(f"Portapapeles ({len(content)} caracteres):\n{preview}")
             except Exception as e:
                 return ToolResult.fail(f"Error al leer el portapapeles: {e}")
 
@@ -62,16 +74,14 @@ class ClipboardTool(Tool):
             if not text:
                 return ToolResult.fail("Para action='set' debes proporcionar 'text'.")
             try:
-                pyperclip.copy(text)
-                return ToolResult.ok(
-                    f"Texto copiado al portapapeles ({len(text)} caracteres)."
-                )
+                _write_clipboard(text)
+                return ToolResult.ok(f"Texto copiado al portapapeles ({len(text)} caracteres).")
             except Exception as e:
                 return ToolResult.fail(f"Error al escribir en el portapapeles: {e}")
 
         if action == "clear":
             try:
-                pyperclip.copy("")
+                _write_clipboard("")
                 return ToolResult.ok("Portapapeles vaciado.")
             except Exception as e:
                 return ToolResult.fail(f"Error al vaciar el portapapeles: {e}")
