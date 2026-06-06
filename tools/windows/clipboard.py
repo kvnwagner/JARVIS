@@ -14,7 +14,7 @@ class ClipboardTool(Tool):
         "Usa 'get' para leer lo que hay copiado, 'set' para escribir texto nuevo. "
         "Úsalo cuando el usuario pida copiar algo, pegar, o leer el portapapeles."
     )
-    parameters = {
+    parameters_schema = {
         "type": "object",
         "properties": {
             "action": {
