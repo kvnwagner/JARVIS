@@ -20,7 +20,7 @@ class ScreenshotTool(Tool):
         "Guarda la imagen en la carpeta screenshots/. "
         "Úsalo cuando el usuario pida capturar, fotografiar o guardar lo que hay en pantalla."
     )
-    parameters = {
+    parameters_schema = {
         "type": "object",
         "properties": {
             "filename": {
