@@ -52,13 +52,14 @@ class LLMResponse:
     text:      Optional[str]
     tool_call: Optional[dict] = None  # {"tool": str, "params": dict}
     raw:       Any = None             # respuesta original del proveedor
+    error:     Optional[str] = None
 
 class LLMProvider(ABC):
 
     @abstractmethod
     def chat(self,
              messages: list[LLMMessage],
-             tools:    list[Tool] = []
+             tools:    Optional[list[Tool]] = None
              ) -> LLMResponse:
         """Única forma de hablar con el LLM en todo el proyecto."""
         ...
