@@ -1,43 +1,35 @@
 # ================================================================
 # core/container.py
 # Contenedor de dependencias — único lugar donde se instancia todo
-#
-# REGLA: nadie fuera de container.py hace InMemoryEventBus()
-# directamente. Así migrar a Redis = cambiar UNA línea aquí.
 # ================================================================
 
+from core.config import Settings, get_settings
+from core.interfaces import EventBus
 from infrastructure.event_bus import InMemoryEventBus
 from infrastructure.logger import JarvisLogger, setup_logging
-from core.interfaces import EventBus
+from tools import ToolRegistry
+from tools.windows import WINDOWS_TOOLS
 
 
 class Container:
-    """
-    Crea y conecta todos los componentes del sistema.
+    """Crea y conecta todos los componentes del sistema."""
 
-    Fase 0.75 : bus + logger
-    Fase 1    : + llm
-    Fase 2    : + tool registry
-    Fase 4    : + memory
-    """
+    def __init__(self, settings: Settings | None = None):
+        # 0. Cargar configuración desde la fuente oficial (core/config.py)
+        self.config = settings or get_settings()
 
-    def __init__(self, log_level: str = "INFO", log_file: str = "logs/jarvis.log"):
+        # 1. Logging primero
+        setup_logging(log_level=self.config.log_level, log_file=self.config.log_file)
 
-        # 1. Logging primero — para que todo lo que sigue quede registrado
-        setup_logging(log_level=log_level, log_file=log_file)
-
-        # 2. EventBus — columna vertebral del sistema
-        #    Para migrar a Redis solo cambiar estas dos líneas:
-        #      from infrastructure.redis_event_bus import RedisEventBus
-        #      self.bus: EventBus = RedisEventBus(url=settings.redis_url)
+        # 2. EventBus
         self.bus: EventBus = InMemoryEventBus()
 
-        # 3. Logger — se suscribe al bus con WILDCARD, registra todo
+        # 3. Logger
         self.logger = JarvisLogger(self.bus)
 
-        # Fases siguientes (descomentar cuando llegue cada fase):
-        # self.llm      = GeminiProvider(...)            # Fase 1
-        # self.registry = ToolRegistry(self.bus)         # Fase 2
-        # self.memory   = SQLiteMemory(self.bus)         # Fase 4
-        # self.agent    = Agent(self.llm, self.registry,
-        #                       self.memory, self.bus)   # Fase 1
+        # 4. Tool Registry
+        self.tool_registry = ToolRegistry(self.bus)
+
+        # 5. Registrar Windows Tools
+        for tool in WINDOWS_TOOLS:
+            self.tool_registry.register(tool)
