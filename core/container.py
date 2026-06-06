@@ -7,6 +7,7 @@ from core.config import Settings, get_settings
 from core.interfaces import EventBus
 from infrastructure.event_bus import InMemoryEventBus
 from infrastructure.logger import JarvisLogger, setup_logging
+from tools import ToolRegistry
 
 
 class Container:
@@ -24,3 +25,6 @@ class Container:
 
         # 3. Logger
         self.logger = JarvisLogger(self.bus)
+
+        # 4. Tool Registry
+        self.tool_registry = ToolRegistry(self.bus)
