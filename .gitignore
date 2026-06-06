@@ -1,8 +1,10 @@
-.env
-config.json
-config.yaml
-logs/
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.env
+logs/
 screenshots/
-*.db
+
+jarvis_test.db
+jarvis.db

@@ -1,4 +1,15 @@
-google-generativeai>=0.8.0
-pydantic>=2.0.0
-pyyaml>=6.0
-requests>=2.31.0
+# ================================================================
+# JARVIS — Dependencias del proyecto
+# Instalar con: pip install -r requirements.txt
+# ================================================================
+
+# Windows Audio Control
+pycaw==20251023
+comtypes==1.4.16
+psutil==7.2.2
+
+# Captura de pantalla
+pillow==11.2.1
+
+# Portapapeles
+pyperclip==1.9.0

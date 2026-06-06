@@ -1,0 +1,14 @@
+2026-06-05 22:20:05 | jarvis.events          | INFO    | JarvisLogger activo — escuchando todos los eventos
+2026-06-05 22:20:05 | jarvis.main            | INFO    | Sistema iniciado correctamente
+2026-06-05 22:20:05 | jarvis.events          | INFO    | system.ready                   | source=main                 | {"version": "0.75", "phase": "EventBus + Logging"}
+2026-06-05 22:20:05 | jarvis.events          | INFO    | user.message                   | source=cli                  | {"text": "Jarvis, abre Spotify"}
+2026-06-05 22:20:05 | jarvis.events          | INFO    | llm.tool_call                  | source=gemini               | {"tool": "open_app", "params": {"app": "spotify"}}
+2026-06-05 22:20:05 | jarvis.events          | INFO    | tool.executed                  | source=open_app             | {"success": true, "output": "Spotify abierto", "tool": "open_app"}
+2026-06-05 22:20:05 | jarvis.events          | INFO    | memory.saved                   | source=memory               | {"entry": "Usuario pidió abrir Spotify"}
+2026-06-05 22:23:29 | jarvis.events          | INFO    | JarvisLogger activo — escuchando todos los eventos
+2026-06-05 22:23:29 | jarvis.main            | INFO    | Sistema iniciado correctamente
+2026-06-05 22:23:29 | jarvis.events          | INFO    | system.ready                   | source=main                 | {"version": "0.75", "phase": "EventBus + Logging"}
+2026-06-05 22:23:29 | jarvis.events          | INFO    | user.message                   | source=cli                  | {"text": "Jarvis, abre Spotify"}
+2026-06-05 22:23:29 | jarvis.events          | INFO    | llm.tool_call                  | source=gemini               | {"tool": "open_app", "params": {"app": "spotify"}}
+2026-06-05 22:23:29 | jarvis.events          | INFO    | tool.executed                  | source=open_app             | {"success": true, "output": "Spotify abierto", "tool": "open_app"}
+2026-06-05 22:23:29 | jarvis.events          | INFO    | memory.saved                   | source=memory               | {"entry": "Usuario pidió abrir Spotify"}
