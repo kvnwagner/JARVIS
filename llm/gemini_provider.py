@@ -15,7 +15,7 @@ class GeminiProvider(LLMProvider):
     def __init__(
         self,
         api_key: str,
-        model: str = "gemini-1.5-flash",
+        model = "gemini-3.5-flash-",
         timeout: int = 30,
     ):
         self.api_key = api_key
