@@ -40,7 +40,7 @@ class CloseAppTool(Tool):
         "Cierra una aplicación de Windows que esté corriendo. "
         "Usa esto cuando el usuario pida cerrar, terminar o matar un programa."
     )
-    parameters_schema = {
+    parameters = {
         "type": "object",
         "properties": {
             "app": {
