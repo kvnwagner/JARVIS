@@ -5,3 +5,6 @@ __pycache__/
 .env
 logs/
 screenshots/
+
+jarvis_test.db
+jarvis.db
