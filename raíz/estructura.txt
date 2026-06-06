@@ -1,0 +1,50 @@
+jarvis/
+├── core/                    ← contratos del equipo
+│   ├── interfaces.py        ← Tool, LLMProvider, MemoryProvider, EventBus
+│   └── config.py            ← Settings (pydantic)
+│
+├── infrastructure/          ← implementaciones de infraestructura
+│   ├── event_bus.py         ← InMemoryEventBus
+│   ├── events.py            ← catálogo de constantes
+│   └── logger.py            ← JarvisLogger (escucha WILDCARD)
+│
+├── llm/                     ← FASE 1 — implementaciones LLMProvider
+│   └── (gemini.py)
+│
+├── tools/                   ← FASE 2–3 — herramientas del agente
+│   ├── registry.py
+│   ├── windows/
+│   └── filesystem/
+│
+├── memory/                  ← FASE 4 — MemoryProvider implementations
+│   ├── ram_memory.py
+│   └── sqlite_memory.py
+│
+├── api/                     ← FASE 5 — FastAPI
+│   └── main.py
+│
+├── voice/                   ← FASE 8 — STT / TTS / wake word
+│   ├── stt.py
+│   ├── tts.py
+│   └── wakeword.py
+│
+├── tests/                   ← Persona 4 — cobertura de todo el proyecto
+│   ├── test_interfaces.py
+│   ├── test_event_bus.py
+│   └── test_config.py
+│
+├── docs/
+│   └── adr/                 ← ADR-001, ADR-002, ADR-003...
+│
+├── .env                     ← NO se sube a git
+├── .env.example             ← sí se sube — plantilla pública
+├── .gitignore
+├── CONTRIBUTING.md
+├── requirements.txt
+└── main.py                  ← punto de entrada — une todo
+
+# Resultado de la Fase 0.5:
+# Un proyecto vacío pero con columna vertebral.
+# Cada persona sabe qué carpeta es suya.
+# Nadie bloquea a nadie.
+estructura.txt — Vista completa del proyecto al finalizar la Fase 0.5. Las carpetas vacías (llm/, tools/, memory/, api/, voice/) son intencionales: reservan el espacio para las fases siguientes.
