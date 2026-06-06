@@ -44,7 +44,7 @@ class OpenAppTool(Tool):
         "Abre una aplicación de Windows. "
         "Usa esto cuando el usuario pida abrir, lanzar o iniciar cualquier programa o aplicación."
     )
-    parameters = {
+    parameters_schema = {
         "type": "object",
         "properties": {
             "app": {
