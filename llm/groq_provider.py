@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import unicodedata
 from typing import Any
 
 import requests
@@ -28,7 +30,6 @@ class GroqProvider(LLMProvider):
         messages: list[LLMMessage],
         tools: list[Tool] | None = None,
     ) -> LLMResponse:
-        """Envía mensajes a Groq y devuelve texto o una llamada a herramienta."""
         payload = self._build_payload(messages, tools or [])
 
         try:
@@ -54,48 +55,48 @@ class GroqProvider(LLMProvider):
             return self._parse_response(data)
 
         except requests.RequestException as exc:
-            return LLMResponse(
-                text=None,
-                tool_call=None,
-                error=f"Error de red hablando con Groq: {exc}",
-            )
+            return LLMResponse(text=None, tool_call=None, error=f"Error de red: {exc}")
         except ValueError as exc:
-            return LLMResponse(
-                text=None,
-                tool_call=None,
-                error=f"Groq devolvió una respuesta no JSON: {exc}",
-            )
+            return LLMResponse(text=None, tool_call=None, error=f"Respuesta no JSON: {exc}")
+
+    @staticmethod
+    def _normalize(text: str) -> str:
+        """Elimina tildes y caracteres especiales para evitar errores en Groq."""
+        return unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii')
 
     def _build_payload(self, messages: list[LLMMessage], tools: list[Tool]) -> dict[str, Any]:
         formatted = []
         for msg in messages:
             role = msg.role.lower()
-            if role == "assistant":
-                role = "assistant"
-            elif role == "system":
-                role = "system"
-            else:
+            if role not in ("system", "assistant", "user"):
                 role = "user"
-            formatted.append({"role": role, "content": msg.content})
+            content = self._normalize((msg.content or "").strip())
+            if not content:
+                continue
+            formatted.append({"role": role, "content": content})
 
         payload: dict[str, Any] = {
             "model": self.model_name,
             "messages": formatted,
-            "temperature": 0.7,
+            "temperature": 0.3,
         }
 
         if tools:
-            payload["tools"] = [
-                {
+            tools_formatted = []
+            for tool in tools:
+                schema = tool.parameters_schema or {"type": "object", "properties": {}}
+                if "required" not in schema:
+                    schema = dict(schema)
+                    schema["required"] = []
+                tools_formatted.append({
                     "type": "function",
                     "function": {
                         "name": tool.name,
-                        "description": tool.description,
-                        "parameters": tool.parameters_schema,
+                        "description": self._normalize(tool.description or ""),
+                        "parameters": schema,
                     },
-                }
-                for tool in tools
-            ]
+                })
+            payload["tools"] = tools_formatted
             payload["tool_choice"] = "auto"
 
         return payload
@@ -103,20 +104,13 @@ class GroqProvider(LLMProvider):
     def _parse_response(self, data: dict[str, Any]) -> LLMResponse:
         choices = data.get("choices") or []
         if not choices:
-            return LLMResponse(
-                text=None,
-                tool_call=None,
-                raw=data,
-                error="Groq no devolvió respuestas.",
-            )
+            return LLMResponse(text=None, tool_call=None, raw=data, error="Groq no devolvio respuestas.")
 
         message = choices[0].get("message", {})
 
-        # Tool call
         tool_calls = message.get("tool_calls")
         if tool_calls:
             tc = tool_calls[0]
-            import json
             function = tc.get("function", {})
             params = function.get("arguments", "{}")
             if isinstance(params, str):
@@ -126,24 +120,15 @@ class GroqProvider(LLMProvider):
                     params = {}
             return LLMResponse(
                 text=None,
-                tool_call={
-                    "tool": function.get("name", ""),
-                    "params": params,
-                },
+                tool_call={"tool": function.get("name", ""), "params": params},
                 raw=data,
             )
 
-        # Texto normal
         text = message.get("content", "").strip()
         if text:
             return LLMResponse(text=text, tool_call=None, raw=data)
 
-        return LLMResponse(
-            text=None,
-            tool_call=None,
-            raw=data,
-            error="Groq no devolvió texto ni herramienta.",
-        )
+        return LLMResponse(text=None, tool_call=None, raw=data, error="Groq no devolvio texto ni herramienta.")
 
     def _extract_api_error(self, data: dict[str, Any], status_code: int) -> str:
         error = data.get("error", {})

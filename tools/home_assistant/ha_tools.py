@@ -25,8 +25,7 @@ class ControlarLuzTool(Tool):
             },
             "action": {
                 "type": "string",
-                "enum": ["on", "off"],
-                "description": "Acción: 'on' para encender, 'off' para apagar"
+                "description": "Acción a ejecutar: 'on' para encender, 'off' para apagar"
             },
             "brightness": {
                 "type": "integer",
@@ -74,8 +73,7 @@ class ControlarClimateTool(Tool):
             },
             "mode": {
                 "type": "string",
-                "enum": ["heat", "cool", "off"],
-                "description": "Modo: 'heat' calentar, 'cool' enfriar, 'off' apagar"
+                "description": "Modo del clima: 'heat' para calentar, 'cool' para enfriar, 'off' para apagar"
             }
         },
         "required": ["entity_id"]
@@ -170,8 +168,12 @@ class ControlarTVTool(Tool):
         "properties": {
             "action": {
                 "type": "string",
-                "enum": ["turn_on", "turn_off", "volume_up", "volume_down", "mute", "pause", "play"],
-                "description": "Acción a ejecutar en el TV"
+                "description": (
+                    "Acción a ejecutar en el TV. Valores posibles: "
+                    "'turn_on' encender, 'turn_off' apagar, "
+                    "'volume_up' subir volumen, 'volume_down' bajar volumen, "
+                    "'mute' silenciar, 'pause' pausar, 'play' reproducir"
+                )
             }
         },
         "required": ["action"]
