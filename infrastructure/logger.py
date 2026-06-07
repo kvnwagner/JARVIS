@@ -14,6 +14,9 @@ from infrastructure.events import WILDCARD, SYSTEM_ERROR
 
 def setup_logging(log_level: str = "INFO", log_file: str = "logs/jarvis.log") -> None:
     """Configura el sistema de logging. Llamar UNA vez al arrancar."""
+    if not log_file or Path(log_file).is_dir():
+        log_file = "logs/jarvis.log"
+
     Path(log_file).parent.mkdir(parents=True, exist_ok=True)
 
     logging.basicConfig(

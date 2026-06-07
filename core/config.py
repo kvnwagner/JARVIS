@@ -15,8 +15,10 @@ from pydantic import BaseModel
 class Settings(BaseModel):
 
     # ── LLM ─────────────────────────────────────────────────
-    llm_provider:   str  = "gemini"     # "gemini" | "openai" | "ollama"
+    llm_provider:   str  = "gemini"     # "gemini" | "groq" | "cerebras" | "openai" | "ollama"
     gemini_api_key: str  = ""
+    groq_api_key:   str  = ""
+    cerebras_api_key: str = ""
     openai_api_key: str  = ""
     ollama_base_url:str  = "http://localhost:11434"
     llm_model:      str  = "gemini-1.5-flash"
@@ -89,6 +91,8 @@ def _collect_settings_data() -> dict:
     env_map = {
         "LLM_PROVIDER": "llm_provider",
         "GEMINI_API_KEY": "gemini_api_key",
+        "GROQ_API_KEY": "groq_api_key",
+        "CEREBRAS_API_KEY": "cerebras_api_key",
         "OPENAI_API_KEY": "openai_api_key",
         "OLLAMA_BASE_URL": "ollama_base_url",
         "LLM_MODEL": "llm_model",
