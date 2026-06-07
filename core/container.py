@@ -9,6 +9,10 @@ from infrastructure.event_bus import InMemoryEventBus
 from infrastructure.logger import JarvisLogger, setup_logging
 from tools import ToolRegistry
 from tools.windows import WINDOWS_TOOLS
+from tools.external.weather import WeatherTool
+from tools.external.news import NewsTool
+from tools.external.email_tool import EmailTool
+from tools.external.spotify_tool import SpotifyTool
 
 
 class Container:
@@ -33,3 +37,9 @@ class Container:
         # 5. Registrar Windows Tools
         for tool in WINDOWS_TOOLS:
             self.tool_registry.register(tool)
+
+        # 6. Registrar herramientas externas
+        self.tool_registry.register(WeatherTool())
+        self.tool_registry.register(NewsTool())
+        self.tool_registry.register(EmailTool())
+        self.tool_registry.register(SpotifyTool())
