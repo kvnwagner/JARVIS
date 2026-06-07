@@ -4,6 +4,7 @@ Abre una aplicación en Windows por nombre.
 Soporta nombres comunes (spotify, chrome, vscode) y rutas absolutas.
 """
 
+import os
 import subprocess
 import shutil
 from core.interfaces import Tool, ToolResult

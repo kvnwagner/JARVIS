@@ -9,8 +9,15 @@ load_dotenv()
 from core.container import Container
 from core.interfaces import Event, EventBus, LLMMessage, LLMResponse
 from infrastructure import events
-from llm import CerebrasProvider
+from llm import CerebrasProvider, GroqProvider
 from tools import ToolRegistry
+
+try:
+    from voice import VoiceManager
+    _VOICE_AVAILABLE = True
+except ImportError:
+    VoiceManager = None
+    _VOICE_AVAILABLE = False
 
 SYSTEM_PROMPT = """
 Eres Jarvis, un asistente personal inteligente. Respondes en español, de forma clara, natural y amigable.
@@ -19,19 +26,21 @@ INTERPRETACIÓN DE MENSAJES:
 - Interpreta SIEMPRE la intención real del usuario, aunque haya errores ortográficos, abreviaciones o lenguaje informal.
 - Ejemplos: "apga el tele" = apagar TV, "ke clima ay en bogota" = clima Bogotá, "pone regueton" = reproducir reggaetón, "manda correo a juan" = enviar email a juan.
 - Si el mensaje es ambiguo, elige la interpretación más lógica y actúa.
+- Si el usuario dice solo el nombre de una aplicación (ej: "Spotify", "Chrome", "Discord"), interpreta que quiere ABRIRLA y usa open_app.
 
 HERRAMIENTAS DISPONIBLES:
 - clima / weather: para preguntas sobre el tiempo, temperatura, lluvia de cualquier ciudad.
 - noticias / news: para pedir noticias, novedades o qué pasó sobre algún tema o lugar.
 - email: para enviar correos electrónicos a alguien.
 - spotify: para reproducir, poner o escuchar música. Parámetros: action=play y query=nombre de canción o artista. NUNCA uses action=search para reproducir.
-- open_app: para abrir aplicaciones del computador que NO sean el televisor.
+- open_app: para abrir aplicaciones del computador que NO sean el televisor. También usar cuando el usuario diga solo el nombre de una app.
 - screenshot: para tomar capturas de pantalla.
 
 REGLAS IMPORTANTES:
 - Usa una herramienta SOLO si el usuario pide una acción concreta.
 - Para preguntas generales, matemáticas, curiosidades, conversación o información: responde con texto directamente, SIN herramientas.
 - Para Spotify: "pon", "reproduce", "escucha", "pone", "dale play", "quero escuchar" → SIEMPRE usa la tool spotify con action=play y query=nombre de la canción.
+- Si el usuario dice solo "Spotify" sin más contexto → usa open_app con app=spotify.
 - Para correos: usa EXACTAMENTE el destinatario que menciona el usuario.
 
 HERRAMIENTAS DEL HOGAR (Home Assistant):
@@ -54,14 +63,59 @@ TONO:
 - No expliques qué herramienta usaste a menos que el usuario lo pregunte.
 """.strip()
 
+TOOL_CONFIRMATIONS = {
+    "open_app": lambda p: f"Listo, abriendo {p.get('app', 'la aplicacion')}",
+    "close_app": lambda p: f"Cerrando {p.get('app', 'la aplicacion')}",
+    "spotify": lambda p: (
+        f"Reproduciendo {p.get('query', 'musica')} en Spotify"
+        if p.get("action") == "play"
+        else "Controlando Spotify"
+    ),
+    "weather": lambda p: f"Consultando el clima en {p.get('city', 'tu ciudad')}",
+    "news": lambda p: f"Buscando noticias sobre {p.get('query', 'el tema')}",
+    "email": lambda p: f"Enviando correo a {p.get('to', 'el destinatario')}",
+    "screenshot": lambda p: "Tomando captura de pantalla",
+    "volume_control": lambda p: "Ajustando el volumen",
+    "controlar_luz": lambda p: (
+        "Encendiendo la luz" if p.get("action") == "on" else "Apagando la luz"
+    ),
+    "controlar_tv": lambda p: "Controlando el televisor",
+    "controlar_clima": lambda p: "Ajustando el clima",
+    "ejecutar_escena": lambda p: "Activando la escena",
+    "consultar_estado_hogar": lambda p: "Consultando el dispositivo",
+}
+
+
+def get_confirmation(tool_name: str, params: dict) -> str:
+    confirmation = TOOL_CONFIRMATIONS.get(tool_name)
+    if confirmation:
+        return confirmation(params)
+    return f"Ejecutando {tool_name}"
+
 
 def build_llm(container: Container):
-    cerebras_key = os.getenv("CEREBRAS_API_KEY", "")
-    if not cerebras_key:
-        print("ERROR: Falta CEREBRAS_API_KEY en el archivo .env")
-        return None
-    print("LLM: Cerebras (llama-3.3-70b)")
-    return CerebrasProvider(api_key=cerebras_key)
+    provider = container.config.llm_provider.lower().strip()
+    model = container.config.llm_model
+
+    if provider == "groq":
+        groq_key = container.config.groq_api_key or os.getenv("GROQ_API_KEY", "")
+        if not groq_key:
+            print("ERROR: Falta GROQ_API_KEY en el archivo .env")
+            return None
+        print(f"LLM: Groq ({model})")
+        return GroqProvider(api_key=groq_key, model=model)
+
+    if provider == "cerebras":
+        cerebras_key = container.config.cerebras_api_key or os.getenv("CEREBRAS_API_KEY", "")
+        if not cerebras_key:
+            print("ERROR: Falta CEREBRAS_API_KEY en el archivo .env")
+            return None
+        print(f"LLM: Cerebras ({model})")
+        return CerebrasProvider(api_key=cerebras_key)
+
+    print(f"ERROR: LLM_PROVIDER no soportado en main.py: {provider}")
+    print("Usa LLM_PROVIDER=groq o LLM_PROVIDER=cerebras")
+    return None
 
 
 def attach_cli_tool_output(bus: EventBus) -> None:
@@ -74,6 +128,48 @@ def attach_cli_tool_output(bus: EventBus) -> None:
 
     bus.subscribe(events.TOOL_EXECUTED, print_tool_success)
     bus.subscribe(events.TOOL_FAILED, print_tool_failure)
+
+
+def build_voice():
+    if not _VOICE_AVAILABLE or VoiceManager is None:
+        print("Voz: no disponible")
+        return None
+
+    try:
+        voice = VoiceManager(
+            tts_enabled=True,
+            stt_enabled=True,
+            prefer_edge_tts=True,
+            language="es-CO",
+        )
+        status = "activada" if voice.tts_available else "TTS no disponible"
+        mic = "activo" if voice.stt_available else "sin microfono"
+        print(f"Voz: {status} | Microfono: {mic}")
+        return voice
+    except Exception as exc:
+        print(f"Voz: error ({exc})")
+        return None
+
+
+def read_user_input(voice) -> tuple[str, str]:
+    print("Tu (Enter=teclado | 'm'=microfono): ", end="", flush=True)
+    raw = input().strip()
+
+    if raw.lower() == "m":
+        if not voice or not voice.stt_available:
+            print("Jarvis: El microfono no esta disponible.")
+            return "", "text"
+
+        print("Escuchando... habla ahora.")
+        heard = voice.listen()
+        if not heard:
+            print("Jarvis: No se escucho nada. Intenta de nuevo.")
+            return "", "voice"
+
+        print(f"Tu (voz): {heard}")
+        return heard, "voice"
+
+    return raw, "text"
 
 
 def main() -> None:
@@ -89,23 +185,40 @@ def main() -> None:
     if llm is None:
         return
 
+    voice = build_voice()
     print(f"Tools registradas: {len(registry.get_all())}\n")
+
+    if voice and voice.tts_available:
+        voice.speak_async("Jarvis activo. En que te ayudo?")
 
     messages = [LLMMessage(role="system", content=SYSTEM_PROMPT)]
 
     while True:
         try:
-            user_input = input("Tu: ").strip()
+            user_input, input_source = read_user_input(voice)
         except KeyboardInterrupt:
+            if voice:
+                voice.speak("Hasta luego.")
             print("\nHasta luego.")
             break
 
         if user_input.lower() in ["salir", "exit", "quit"]:
+            if voice:
+                voice.speak("Hasta luego.")
             break
         if not user_input:
             continue
+        if user_input.lower() == "voz off" and voice:
+            voice.toggle_voice()
+            print("Jarvis: Voz desactivada.")
+            continue
+        if user_input.lower() == "voz on" and voice:
+            voice.toggle_voice()
+            print("Jarvis: Voz activada.")
+            continue
 
-        bus.publish(Event(name=events.USER_MESSAGE, payload={"text": user_input}, source="cli"))
+        event_name = events.USER_VOICE_INPUT if input_source == "voice" else events.USER_MESSAGE
+        bus.publish(Event(name=event_name, payload={"text": user_input}, source="cli"))
         messages.append(LLMMessage(role="user", content=user_input))
 
         response = llm.chat(messages, tools=registry.get_all())
@@ -113,12 +226,20 @@ def main() -> None:
         if response.error:
             bus.publish(Event(name=events.LLM_ERROR, payload={"error": response.error}, source="llm"))
             print(f"Jarvis: Error — {response.error}")
+            if voice:
+                voice.speak_async("Hubo un error, intenta de nuevo.")
             continue
 
         if response.tool_call:
             tool_name = response.tool_call.get("tool", "")
             params = response.tool_call.get("params", {})
+            confirmation = get_confirmation(tool_name, params)
+            print(f"Jarvis: {confirmation}")
+            if voice:
+                voice.speak_async(confirmation)
+
             print(f"Tool elegida: {tool_name}({params})")
+            bus.publish(Event(name=events.LLM_TOOL_CALL, payload=response.tool_call, source="llm"))
             result = registry.execute(tool_name, params)
             tool_output = result.output if result.success else f"Error: {result.error}"
 
@@ -139,11 +260,15 @@ def main() -> None:
             messages.append(LLMMessage(role="assistant", content=answer))
             bus.publish(Event(name=events.LLM_RESPONSE, payload={"text": answer}, source="llm"))
             print(f"Jarvis: {answer}")
+            if voice:
+                voice.speak_async(answer)
 
         elif response.text:
             messages.append(LLMMessage(role="assistant", content=response.text))
             bus.publish(Event(name=events.LLM_RESPONSE, payload={"text": response.text}, source="llm"))
             print(f"Jarvis: {response.text}")
+            if voice:
+                voice.speak_async(response.text)
 
         else:
             print("Jarvis: No recibí texto ni llamada a herramienta del LLM.")

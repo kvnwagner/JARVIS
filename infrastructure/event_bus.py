@@ -52,8 +52,8 @@ class RedisEventBus(EventBus):
         self._redis = redis.from_url(
             url,
             decode_responses=True,
-            socket_connect_timeout=2,
-            socket_timeout=2,
+            socket_connect_timeout=0.5,
+            socket_timeout=0.5,
         )
         self._redis.ping()
 
