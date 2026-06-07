@@ -13,6 +13,7 @@ from tools.external.weather import WeatherTool
 from tools.external.news import NewsTool
 from tools.external.email_tool import EmailTool
 from tools.external.spotify_tool import SpotifyTool
+from tools.home_assistant.registry import HA_TOOLS  # ← nuevo
 
 
 class Container:
@@ -43,3 +44,6 @@ class Container:
         self.tool_registry.register(NewsTool())
         self.tool_registry.register(EmailTool())
         self.tool_registry.register(SpotifyTool())
+        # 6. Registrar Home Assistant Tools  ← nuevo
+        for tool in HA_TOOLS:
+            self.tool_registry.register(tool)

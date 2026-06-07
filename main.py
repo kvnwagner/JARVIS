@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from core.container import Container
-from core.interfaces import Event, EventBus, LLMMessage, LLMResponse
+from core.interfaces import Event, LLMMessage
 from infrastructure import events
 from llm import GeminiProvider, GroqProvider
 from tools import ToolRegistry
@@ -86,8 +86,37 @@ def main() -> None:
 
     container = Container()
     bus       = container.bus
+REGLAS IMPORTANTES:
+- Solo usa una herramienta si el usuario EXPLÍCITAMENTE pide una acción.
+- Para preguntas generales, matemáticas, información o conversación: responde con texto directamente, SIN usar herramientas.
+- Ejemplos de cuando NO usar herramientas: "cuanto es 2+2", "quien es Blessd", "como estás".
+- Ejemplos de cuando SÍ usar herramientas: "abre spotify", "sube el volumen", "apaga la luz del salón", "pon el clima a 22 grados".
+
+HERRAMIENTAS DEL HOGAR:
+- Para controlar luces usa: controlar_luz con entity_id, action (on/off) y brightness opcional.
+- Para controlar clima usa: controlar_clima con entity_id, temperature y mode opcional.
+- Para consultar dispositivos usa: consultar_estado_hogar con entity_id.
+- Para activar escenas usa: ejecutar_escena con entity_id.
+""".strip()
+
+
+def build_llm(container: Container) -> GeminiProvider | None:
+    config = container.config
+    if config.llm_provider != "gemini":
+        print(f"ERROR: proveedor LLM no soportado: {config.llm_provider}")
+        return None
+    if not config.gemini_api_key:
+        print("ERROR: Falta GEMINI_API_KEY en .env")
+        return None
+    return GeminiProvider(api_key=config.gemini_api_key, model=config.llm_model)
+
+
+def main() -> None:
+    print("\nJARVIS")
+    print("=" * 30 + "\n")
+
+    container = Container()
     registry: ToolRegistry = container.tool_registry
-    attach_cli_tool_output(bus)
 
     llm = build_llm(container)
     if llm is None:
@@ -105,12 +134,10 @@ def main() -> None:
         if not user_input:
             continue
 
-        bus.publish(Event(name=events.USER_MESSAGE, payload={"text": user_input}, source="cli"))
         messages.append(LLMMessage(role="user", content=user_input))
 
+        # Primera llamada: Gemini decide si usar tool o responder directo
         response = llm.chat(messages, tools=registry.get_all())
-        if response.text:
-            messages.append(LLMMessage(role="assistant", content=response.text))
 
         publish_llm_result(response, bus, registry, messages)
 
