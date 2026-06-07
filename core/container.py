@@ -2,6 +2,8 @@
 # core/container.py
 # Contenedor de dependencias — único lugar donde se instancia todo
 # ================================================================
+import logging
+
 from core.config import Settings, get_settings
 from core.interfaces import EventBus
 from infrastructure.event_bus import InMemoryEventBus, RedisEventBus
@@ -53,7 +55,14 @@ class Container:
         if backend == "memory":
             return InMemoryEventBus()
         if backend == "redis":
-            return RedisEventBus(self.config.redis_url)
+            try:
+                return RedisEventBus(self.config.redis_url)
+            except Exception as exc:
+                logging.getLogger("jarvis.container").warning(
+                    "Redis no esta disponible (%s). Usando EventBus en memoria.",
+                    exc,
+                )
+                return InMemoryEventBus()
         raise ValueError(
             "EVENT_BUS_BACKEND debe ser 'memory' o 'redis'. "
             f"Valor recibido: {self.config.event_bus_backend!r}"

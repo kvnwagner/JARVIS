@@ -16,6 +16,7 @@ requests==2.34.2
 # Validación y configuración
 pydantic==2.13.4
 pydantic_core==2.46.4
+python-dotenv==1.2.2
  
 # Windows Audio Control
 pycaw==20251023
@@ -39,3 +40,11 @@ urllib3==2.7.0
 redis==6.4.0
  
 openai==1.58.0
+
+# Voz (TTS/STT)
+edge-tts==7.2.8
+SpeechRecognition==3.15.1
+sounddevice==0.5.5
+
+# Spotify
+spotipy==2.25.2
