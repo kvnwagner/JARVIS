@@ -1,15 +1,37 @@
 # ================================================================
 # JARVIS — Dependencias del proyecto
 # Instalar con: pip install -r requirements.txt
+#
+# NOTA: pywin32 es solo para Windows
 # ================================================================
-
+ 
+# API
+fastapi==0.136.3
+uvicorn==0.49.0
+starlette==1.2.1
+ 
+# LLM
+requests==2.34.2
+ 
+# Validación y configuración
+pydantic==2.13.4
+pydantic_core==2.46.4
+ 
 # Windows Audio Control
 pycaw==20251023
 comtypes==1.4.16
 psutil==7.2.2
-
+ 
 # Captura de pantalla
-pillow==11.2.1
-
-# Portapapeles
-pyperclip==1.9.0
+pillow==12.2.0
+ 
+# Portapapeles (Windows)
+pyperclip==1.11.0
+pywin32==312
+ 
+# HTTP
+certifi==2026.5.20
+charset-normalizer==3.4.7
+idna==3.18
+urllib3==2.7.0
+ 

@@ -3,15 +3,89 @@
 main.py - Punto de entrada de Jarvis
 """
 
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
 from core.container import Container
 from core.interfaces import Event, LLMMessage
 from infrastructure import events
-from llm import GeminiProvider
+from llm import GeminiProvider, GroqProvider
 from tools import ToolRegistry
 
 SYSTEM_PROMPT = """
 Eres Jarvis, un asistente local. Responde en español, claro y breve.
 
+HERRAMIENTAS DISPONIBLES:
+- clima/weather: cuando pregunten por el tiempo o temperatura de una ciudad
+- noticias/news: cuando pidan noticias o qué pasó en algún lugar o tema
+- email: cuando pidan enviar un correo a alguien
+- spotify con action=play: cuando pidan reproducir, poner o escuchar música. NUNCA uses action=search para reproducir.
+- open_app: cuando pidan abrir una aplicación
+- screenshot: cuando pidan tomar una captura de pantalla
+
+REGLAS:
+- Usa la herramienta correspondiente según lo que el usuario pida.
+- Para preguntas generales, matemáticas o conversación: responde con texto directamente.
+- Cuando el usuario pida enviar un correo, usa EXACTAMENTE el destinatario que menciona en su mensaje actual.
+- Para Spotify: cuando el usuario diga "pon", "reproduce", "escucha" o similar, SIEMPRE usa action=play con el query de la canción.
+""".strip()
+
+
+def build_llm(container: Container):
+    groq_key = os.getenv("GROQ_API_KEY", "")
+    if groq_key:
+        print("LLM: Groq (llama-3.3-70b-versatile)")
+        return GroqProvider(api_key=groq_key, model="llama-3.3-70b-versatile")
+
+    config = container.config
+    if not config.gemini_api_key:
+        print("ERROR: Falta GROQ_API_KEY o GEMINI_API_KEY en el archivo .env")
+        return None
+
+    print(f"LLM: Gemini ({config.llm_model})")
+    return GeminiProvider(api_key=config.gemini_api_key, model=config.llm_model)
+
+
+def attach_cli_tool_output(bus: EventBus) -> None:
+    def print_tool_success(event: Event) -> None:
+        print(f"Jarvis: OK {event.payload.get('output', '')}")
+
+    def print_tool_failure(event: Event) -> None:
+        print(f"Jarvis: Tool fallo: {event.payload.get('error', 'error desconocido')}")
+
+    bus.subscribe(events.TOOL_EXECUTED, print_tool_success)
+    bus.subscribe(events.TOOL_FAILED, print_tool_failure)
+
+
+def publish_llm_result(response: LLMResponse, bus: EventBus, registry: ToolRegistry, messages: list) -> None:
+    if response.error:
+        bus.publish(Event(name=events.LLM_ERROR, payload={"error": response.error}, source="llm"))
+        print(f"Jarvis: {response.error}")
+        return
+
+    if response.text:
+        bus.publish(Event(name=events.LLM_RESPONSE, payload={"text": response.text}, source="llm"))
+        print(f"Jarvis: {response.text}")
+        return
+
+    if response.tool_call:
+        tool_name = response.tool_call.get("tool", "")
+        params    = response.tool_call.get("params", {})
+        print(f"Tool elegida: {tool_name}({params})")
+        bus.publish(Event(name=events.LLM_TOOL_CALL, payload=response.tool_call, source="llm"))
+        # El registry ejecuta la tool automáticamente via handle_llm_tool_call
+        return
+
+    print("Jarvis: No recibí texto ni llamada a herramienta del LLM.")
+
+
+def main() -> None:
+    print("\nJARVIS")
+    print("LLM Provider + Tool Registry\n")
+
+    container = Container()
+    bus       = container.bus
 REGLAS IMPORTANTES:
 - Solo usa una herramienta si el usuario EXPLÍCITAMENTE pide una acción.
 - Para preguntas generales, matemáticas, información o conversación: responde con texto directamente, SIN usar herramientas.
@@ -48,7 +122,7 @@ def main() -> None:
     if llm is None:
         return
 
-    print(f"LLM: Gemini ({llm.model_name})")
+    print("Tool Registry inicializado")
     print(f"Tools registradas: {len(registry.get_all())}\n")
 
     messages = [LLMMessage(role="system", content=SYSTEM_PROMPT)]
@@ -65,41 +139,11 @@ def main() -> None:
         # Primera llamada: Gemini decide si usar tool o responder directo
         response = llm.chat(messages, tools=registry.get_all())
 
-        if response.error:
-            print(f"Jarvis: Error — {response.error}")
-            continue
+        publish_llm_result(response, bus, registry, messages)
 
-        if response.tool_call:
-            tool_name = response.tool_call.get("tool", "")
-            params = response.tool_call.get("params", {})
-
-            # Ejecutar la tool silenciosamente
-            result = registry.execute(tool_name, params)
-            tool_output = result.output if result.success else f"Error: {result.error}"
-
-            # Segunda llamada: le pedimos a Gemini que interprete el resultado
-            # Usamos un mensaje directo sin historial de tools para evitar loop
-            interpretation_messages = [
-                LLMMessage(role="system", content=SYSTEM_PROMPT),
-                LLMMessage(role="user", content=user_input),
-                LLMMessage(
-                    role="user",
-                    content=(
-                        f"La herramienta '{tool_name}' devolvió este resultado: {tool_output}. "
-                        f"Responde al usuario en español natural y amigable basándote en ese resultado. "
-                        f"No uses herramientas, solo responde con texto."
-                    )
-                ),
-            ]
-
-            final = llm.chat(interpretation_messages, tools=None)
-            answer = final.text or tool_output
-            messages.append(LLMMessage(role="assistant", content=answer))
-            print(f"Jarvis: {answer}")
-
-        elif response.text:
-            messages.append(LLMMessage(role="assistant", content=response.text))
-            print(f"Jarvis: {response.text}")
+        # Mantener solo system prompt + últimos 6 mensajes para evitar contexto largo
+        if len(messages) > 7:
+            messages = [messages[0]] + messages[-6:]
 
 
 if __name__ == "__main__":
