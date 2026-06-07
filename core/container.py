@@ -9,6 +9,7 @@ from infrastructure.event_bus import InMemoryEventBus
 from infrastructure.logger import JarvisLogger, setup_logging
 from tools import ToolRegistry
 from tools.windows import WINDOWS_TOOLS
+from tools.home_assistant.registry import HA_TOOLS  # ← nuevo
 
 
 class Container:
@@ -32,4 +33,8 @@ class Container:
 
         # 5. Registrar Windows Tools
         for tool in WINDOWS_TOOLS:
+            self.tool_registry.register(tool)
+
+        # 6. Registrar Home Assistant Tools  ← nuevo
+        for tool in HA_TOOLS:
             self.tool_registry.register(tool)
