@@ -151,10 +151,30 @@ def build_voice():
         return None
 
 
+def _toggle_pause(voice) -> None:
+    """Pausa o reanuda el TTS si está disponible."""
+    tts = getattr(voice, "tts", None)
+    if tts and hasattr(tts, "toggle_pause"):
+        paused = tts.toggle_pause()
+        print("Jarvis: Voz pausada." if paused else "Jarvis: Voz reanudada.")
+    else:
+        # Fallback: si el TTS no tiene toggle_pause, al menos detiene el hilo
+        print("Jarvis: Pausa no soportada en este modo de voz.")
+
+
 def read_user_input(voice) -> tuple[str, str]:
-    print("Tu (Enter=teclado | 'm'=microfono): ", end="", flush=True)
+    print("Tu (Enter=teclado | 'm'=microfono | 'p'=pausar/reanudar): ", end="", flush=True)
     raw = input().strip()
 
+    # ── Pausa / reanuda con 'p' ───────────────────────────────
+    if raw.lower() == "p":
+        if voice:
+            _toggle_pause(voice)
+        else:
+            print("Jarvis: Voz no disponible.")
+        return "", "text"
+
+    # ── Entrada por micrófono con 'm' ─────────────────────────
     if raw.lower() == "m":
         if not voice or not voice.stt_available:
             print("Jarvis: El microfono no esta disponible.")
@@ -187,6 +207,7 @@ def main() -> None:
 
     voice = build_voice()
     print(f"Tools registradas: {len(registry.get_all())}\n")
+    print("Comandos: m=microfono | p=pausar/reanudar voz | voz on/off | salir\n")
 
     if voice and voice.tts_available:
         voice.speak_async("Jarvis activo. En que te ayudo?")
