@@ -8,6 +8,8 @@ from tools.home_assistant.ha_tools import (
     ConsultarEstadoTool,
     EjecutarEscenaTool,
     ControlarTVTool,
+    AbrirAppTVTool,
+    BuscarYouTubeTVTool,
 )
 
 HA_TOOLS = [
@@ -16,6 +18,8 @@ HA_TOOLS = [
     ConsultarEstadoTool(),
     EjecutarEscenaTool(),
     ControlarTVTool(),
+    AbrirAppTVTool(),
+    BuscarYouTubeTVTool(),
 ]
 
 HA_TOOLS_MAP = {tool.name: tool for tool in HA_TOOLS}

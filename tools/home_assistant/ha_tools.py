@@ -3,7 +3,11 @@ Home Assistant Tools
 Controla dispositivos del hogar a través de la API de Home Assistant.
 """
 
+import os
 import asyncio
+import urllib.parse
+import urllib.request
+import json
 from core.interfaces import Tool, ToolResult
 from tools.home_assistant.ha_client import HomeAssistantClient
 
@@ -201,3 +205,110 @@ class ControlarTVTool(Tool):
             return ToolResult.ok(f"TV → {action} ejecutado correctamente.")
         except Exception as e:
             return ToolResult.fail(f"Error al controlar el TV: {e}")
+
+
+APP_INTENTS = {
+    "netflix": "com.netflix.ninja",
+    "youtube": "com.google.android.youtube.tv",
+    "spotify": "com.spotify.tv.android",
+    "prime video": "com.amazon.amazonvideo.livingroom",
+    "disney+": "com.disney.disneyplus",
+    "hbo": "com.hbo.hbonow",
+    "twitch": "tv.twitch.android.app",
+}
+
+
+class AbrirAppTVTool(Tool):
+    name = "abrir_app_tv"
+    description = (
+        "Abre una aplicación en el Smart TV TCL Android. "
+        "Usa esto cuando el usuario pida abrir Netflix, YouTube, Spotify, Prime Video, Disney+ u otra app en el TV."
+    )
+    parameters_schema = {
+        "type": "object",
+        "properties": {
+            "app": {
+                "type": "string",
+                "description": (
+                    "Nombre de la app a abrir en el TV. Valores posibles: "
+                    "'netflix', 'youtube', 'spotify', 'prime video', 'disney+', 'hbo', 'twitch'"
+                )
+            }
+        },
+        "required": ["app"]
+    }
+
+    def execute(self, params: dict) -> ToolResult:
+        app = params.get("app", "").strip().lower()
+        entity_id = "media_player.android_tv_192_168_10_20"
+        if not app:
+            return ToolResult.fail("No se especificó ninguna app.")
+
+        package = APP_INTENTS.get(app)
+        if not package:
+            return ToolResult.fail(
+                f"App '{app}' no reconocida. Apps disponibles: {', '.join(APP_INTENTS.keys())}"
+            )
+
+        try:
+            asyncio.run(ha.call_service("androidtv", "adb_command", {
+                "entity_id": entity_id,
+                "command": f"monkey -p {package} -c android.intent.category.LAUNCHER 1"
+            }))
+            return ToolResult.ok(f"Abriendo {app} en el TV.")
+        except Exception as e:
+            return ToolResult.fail(f"Error al abrir app en el TV: {e}")
+
+
+class BuscarYouTubeTVTool(Tool):
+    name = "buscar_youtube_tv"
+    description = (
+        "Reproduce contenido específico en YouTube en el Smart TV TCL. "
+        "Usa esto cuando el usuario pida poner, buscar o reproducir algo en YouTube en el TV. "
+        "Ejemplos: 'pon música de Bad Bunny en el TV', 'pon videos de risa en el TV', 'pon reggaetón en el TV'."
+    )
+    parameters_schema = {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "Lo que se quiere reproducir en YouTube. Ej: 'música de Bad Bunny', 'videos de risa', 'reggaetón'"
+            }
+        },
+        "required": ["query"]
+    }
+
+    def execute(self, params: dict) -> ToolResult:
+        query = params.get("query", "").strip()
+        entity_id = "media_player.android_tv_192_168_10_20"
+        if not query:
+            return ToolResult.fail("No se especificó qué reproducir.")
+
+        api_key = os.getenv("YOUTUBE_API_KEY", "")
+        if not api_key:
+            return ToolResult.fail("Falta YOUTUBE_API_KEY en el archivo .env")
+
+        try:
+            query_encoded = urllib.parse.quote(query)
+            url = (
+                f"https://www.googleapis.com/youtube/v3/search"
+                f"?part=snippet&q={query_encoded}&type=video&maxResults=1&key={api_key}"
+            )
+            with urllib.request.urlopen(url) as response:
+                data = json.loads(response.read().decode())
+
+            items = data.get("items", [])
+            if not items:
+                return ToolResult.fail(f"No se encontraron videos para '{query}'.")
+
+            video_id = items[0]["id"]["videoId"]
+            video_url = f"https://www.youtube.com/watch?v={video_id}"
+            video_title = items[0]["snippet"]["title"]
+
+            asyncio.run(ha.call_service("androidtv", "adb_command", {
+                "entity_id": entity_id,
+                "command": f'am start -a android.intent.action.VIEW -d "{video_url}"'
+            }))
+            return ToolResult.ok(f"Reproduciendo en el TV: {video_title}")
+        except Exception as e:
+            return ToolResult.fail(f"Error al reproducir en YouTube: {e}")
