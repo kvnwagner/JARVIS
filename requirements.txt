@@ -34,5 +34,8 @@ certifi==2026.5.20
 charset-normalizer==3.4.7
 idna==3.18
 urllib3==2.7.0
+
+# EventBus Redis
+redis==6.4.0
  
 openai==1.58.0
