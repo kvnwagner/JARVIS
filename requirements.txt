@@ -42,9 +42,15 @@ redis==6.4.0
 openai==1.58.0
 
 # Voz (TTS/STT)
-edge-tts==7.2.8
-SpeechRecognition==3.15.1
-sounddevice==0.5.5
+py -m pip install python-dotenv
+py -m pip install pyttsx3
+py -m pip install SpeechRecognition
+py -m pip install sounddevice
+py -m pip install scipy
+py -m pip install spotipy
+py -m pip install httpx
+py -m pip install edge-tts
+py -m pip install -r requirements.txt
 
 # Spotify
 spotipy==2.25.2
