@@ -47,6 +47,46 @@ def _get_active_device(sp: spotipy.Spotify) -> str | None:
         return None
 
 
+def _search_best_track(sp: spotipy.Spotify, query: str):
+    """
+    Busca la canción más precisa usando múltiples estrategias.
+    Retorna el track más relevante o None.
+    """
+    # Estrategia 1: búsqueda exacta con más resultados
+    results = sp.search(q=query, type="track", limit=10)
+    tracks = results.get("tracks", {}).get("items", [])
+
+    if not tracks:
+        return None
+
+    query_lower = query.lower()
+
+    # Intentar encontrar coincidencia exacta por nombre de canción
+    for track in tracks:
+        track_name = track["name"].lower()
+        artist_name = track["artists"][0]["name"].lower()
+        # Coincidencia exacta del nombre de la canción
+        if track_name == query_lower:
+            return track
+        # El nombre de la canción está completamente en el query
+        if track_name in query_lower:
+            return track
+        # El artista también coincide
+        if any(word in artist_name for word in query_lower.split()):
+            if any(word in track_name for word in query_lower.split()):
+                return track
+
+    # Estrategia 2: buscar con comillas para mayor precisión
+    # Extraer posible nombre de canción (primeras palabras antes de un artista conocido)
+    quoted_results = sp.search(q=f'"{query}"', type="track", limit=5)
+    quoted_tracks = quoted_results.get("tracks", {}).get("items", [])
+    if quoted_tracks:
+        return quoted_tracks[0]
+
+    # Fallback: primer resultado original
+    return tracks[0]
+
+
 class SpotifyTool(Tool):
     name = "spotify"
     description = (
@@ -85,11 +125,9 @@ class SpotifyTool(Tool):
                     return ToolResult.fail("No hay un dispositivo Spotify activo. Abre Spotify en tu PC o celular primero.")
 
                 if query:
-                    results = sp.search(q=query, type="track", limit=1)
-                    tracks  = results.get("tracks", {}).get("items", [])
-                    if not tracks:
+                    track = _search_best_track(sp, query)
+                    if not track:
                         return ToolResult.fail(f"No se encontró '{query}' en Spotify.")
-                    track = tracks[0]
                     sp.start_playback(device_id=device_id, uris=[track["uri"]])
                     artist = track["artists"][0]["name"]
                     name   = track["name"]
