@@ -2,7 +2,7 @@ import unittest
 
 from core.interfaces import Event
 from infrastructure import events
-from infrastructure.event_bus import InMemoryEventBus
+from infrastructure.event_bus import InMemoryEventBus, RedisEventBus
 
 
 class InMemoryEventBusTest(unittest.TestCase):
@@ -40,6 +40,25 @@ class InMemoryEventBusTest(unittest.TestCase):
         bus.publish(event)
 
         self.assertEqual(received, [event])
+
+    def test_redis_event_bus_serializes_event_contract(self):
+        bus = object.__new__(RedisEventBus)
+        bus._instance_id = "test-instance"
+
+        event = Event(
+            name=events.USER_MESSAGE,
+            payload={"text": "hola"},
+            source="test",
+        )
+
+        raw = bus._serialize(event)
+        envelope = bus._deserialize(raw)
+
+        self.assertEqual(envelope["publisher_id"], "test-instance")
+        self.assertEqual(envelope["event"].name, event.name)
+        self.assertEqual(envelope["event"].payload, event.payload)
+        self.assertEqual(envelope["event"].source, event.source)
+        self.assertEqual(envelope["event"].timestamp, event.timestamp)
 
 
 if __name__ == "__main__":

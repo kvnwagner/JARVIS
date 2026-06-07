@@ -4,7 +4,7 @@
 # ================================================================
 from core.config import Settings, get_settings
 from core.interfaces import EventBus
-from infrastructure.event_bus import InMemoryEventBus
+from infrastructure.event_bus import InMemoryEventBus, RedisEventBus
 from infrastructure.logger import JarvisLogger, setup_logging
 from tools import ToolRegistry
 from tools.windows import WINDOWS_TOOLS
@@ -26,7 +26,7 @@ class Container:
         setup_logging(log_level=self.config.log_level, log_file=self.config.log_file)
 
         # 2. EventBus
-        self.bus: EventBus = InMemoryEventBus()
+        self.bus: EventBus = self._build_event_bus()
 
         # 3. Logger
         self.logger = JarvisLogger(self.bus)
@@ -47,3 +47,14 @@ class Container:
         # 7. Registrar herramientas de Home Assistant
         for tool in HA_TOOLS:
             self.tool_registry.register(tool)
+
+    def _build_event_bus(self) -> EventBus:
+        backend = self.config.event_bus_backend.lower().strip()
+        if backend == "memory":
+            return InMemoryEventBus()
+        if backend == "redis":
+            return RedisEventBus(self.config.redis_url)
+        raise ValueError(
+            "EVENT_BUS_BACKEND debe ser 'memory' o 'redis'. "
+            f"Valor recibido: {self.config.event_bus_backend!r}"
+        )

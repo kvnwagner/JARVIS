@@ -133,4 +133,5 @@ def get_settings() -> Settings:
 # GEMINI_API_KEY=tu_clave_aqui
 # DB_PATH=jarvis.db
 # EVENT_BUS_BACKEND=memory
+# REDIS_URL=redis://localhost:6379
 # LOG_LEVEL=INFO
