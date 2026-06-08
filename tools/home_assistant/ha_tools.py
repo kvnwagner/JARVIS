@@ -13,6 +13,8 @@ from tools.home_assistant.ha_client import HomeAssistantClient
 
 ha = HomeAssistantClient()
 
+TV_ENTITY_ID = "media_player.android_tv_192_168_10_12"
+
 
 class ControlarLuzTool(Tool):
     name = "controlar_luz"
@@ -240,7 +242,6 @@ class AbrirAppTVTool(Tool):
 
     def execute(self, params: dict) -> ToolResult:
         app = params.get("app", "").strip().lower()
-        entity_id = "media_player.android_tv_192_168_10_20"
         if not app:
             return ToolResult.fail("No se especificó ninguna app.")
 
@@ -252,7 +253,7 @@ class AbrirAppTVTool(Tool):
 
         try:
             asyncio.run(ha.call_service("androidtv", "adb_command", {
-                "entity_id": entity_id,
+                "entity_id": TV_ENTITY_ID,
                 "command": f"monkey -p {package} -c android.intent.category.LAUNCHER 1"
             }))
             return ToolResult.ok(f"Abriendo {app} en el TV.")
@@ -280,7 +281,6 @@ class BuscarYouTubeTVTool(Tool):
 
     def execute(self, params: dict) -> ToolResult:
         query = params.get("query", "").strip()
-        entity_id = "media_player.android_tv_192_168_10_20"
         if not query:
             return ToolResult.fail("No se especificó qué reproducir.")
 
@@ -306,7 +306,7 @@ class BuscarYouTubeTVTool(Tool):
             video_title = items[0]["snippet"]["title"]
 
             asyncio.run(ha.call_service("androidtv", "adb_command", {
-                "entity_id": entity_id,
+                "entity_id": TV_ENTITY_ID,
                 "command": f'am start -a android.intent.action.VIEW -d "{video_url}"'
             }))
             return ToolResult.ok(f"Reproduciendo en el TV: {video_title}")
