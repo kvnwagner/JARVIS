@@ -11,25 +11,32 @@ from core.interfaces import Tool, ToolResult
 
 # Mapa de nombres amigables → ejecutables reales
 APP_ALIASES: dict[str, str] = {
-    "spotify": "spotify",
-
-    "chrome": r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-    "google chrome": r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-
-    "vscode": r"C:\Users\qandr\AppData\Local\Programs\Microsoft VS Code\Code.exe",
-    "visual studio code": r"C:\Users\qandr\AppData\Local\Programs\Microsoft VS Code\Code.exe",
-
-    "whatsapp": "shell:AppsFolder\\5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App",
-
-    "discord": "discord",
-    "telegram": "telegram",
-    "steam": "steam",
-
-    "notepad": "notepad",
-    "explorer": "explorer",
-    "calculadora": "calc",
+    "spotify":        "spotify",
+    "chrome":         "chrome",
+    "google chrome":  "chrome",
+    "firefox":        "firefox",
+    "vscode":         "code",
+    "visual studio code": "code",
+    "notepad":        "notepad",
+    "bloc de notas":  "notepad",
+    "explorer":       "explorer",
+    "explorador":     "explorer",
+    "calculadora":    "calc",
+    "calculator":     "calc",
+    "paint":          "mspaint",
+    "cmd":            "cmd",
+    "powershell":     "powershell",
+    "task manager":   "taskmgr",
+    "administrador de tareas": "taskmgr",
+    "discord":        "discord",
+    "slack":          "slack",
+    "zoom":           "zoom",
+    "obs":            "obs64",
+    "vlc":            "vlc",
+    "word":           "winword",
+    "excel":          "excel",
+    "powerpoint":     "powerpnt",
 }
-
 
 
 class OpenAppTool(Tool):
@@ -57,13 +64,6 @@ class OpenAppTool(Tool):
         # Resolver alias
         executable = APP_ALIASES.get(app_name, app_name)
 
-        if app_name == "whatsapp":
-            subprocess.Popen(
-                ["explorer.exe", "shell:AppsFolder\5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App"]
-            )
-            return ToolResult.ok("WhatsApp abierto correctamente.")
-
-
         # Verificar si el ejecutable existe en PATH
         if not shutil.which(executable):
             return ToolResult.fail(
@@ -73,18 +73,11 @@ class OpenAppTool(Tool):
 
         try:
             # creationflags=0x00000008 → DETACHED_PROCESS (no bloquea)
-            if executable.startswith("shell:AppsFolder"):
-                subprocess.Popen(
-                    f'explorer.exe "{executable}"',
-                    shell=True,
-                    creationflags=subprocess.DETACHED_PROCESS
-                )
-            else:
-                subprocess.Popen(
-                    executable,
-                    shell=True,
-                    creationflags=subprocess.DETACHED_PROCESS
-                )
+            subprocess.Popen(
+                [executable],
+                creationflags=subprocess.DETACHED_PROCESS,
+                close_fds=True
+            )
             return ToolResult.ok(f"Aplicación '{app_name}' abierta correctamente.")
         except Exception as e:
             return ToolResult.fail(f"Error al abrir '{app_name}': {e}")
