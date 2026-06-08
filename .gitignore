@@ -1,10 +1,42 @@
+# Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.egg-info/
+.eggs/
+dist/
+build/
+venv/
+.venv/
+env/
+
+# Entorno y secretos
 .env
+*.env
+
+# Logs y base de datos
 logs/
 screenshots/
-
 jarvis_test.db
 jarvis.db
+
+# Caché de Spotify
+.spotify_cache
+
+# Modelos de voz (pesados)
+models/
+
+# Node / Electron / Tauri
+node_modules/
+dist_electron/
+target/
+.cargo/
+
+# Tauri / Rust
+desktop/src-tauri/target/
+**/target/
+
+# Builds frontend
+desktop/dist/
+dist/

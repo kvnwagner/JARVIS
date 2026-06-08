@@ -5,6 +5,7 @@ Controla dispositivos del hogar a través de la API de Home Assistant.
 
 import os
 import asyncio
+import threading
 import urllib.parse
 import urllib.request
 import json
@@ -12,6 +13,39 @@ from core.interfaces import Tool, ToolResult
 from tools.home_assistant.ha_client import HomeAssistantClient
 
 ha = HomeAssistantClient()
+
+
+def run_async(coro):
+    """Ejecuta una coroutine de forma segura sin importar si hay un event loop activo."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        result = {}
+        exception = {}
+        event = threading.Event()
+
+        def run_in_thread():
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            try:
+                result["value"] = new_loop.run_until_complete(coro)
+            except Exception as e:
+                exception["value"] = e
+            finally:
+                new_loop.close()
+                event.set()
+
+        t = threading.Thread(target=run_in_thread, daemon=True)
+        t.start()
+        event.wait()
+        if "value" in exception:
+            raise exception["value"]
+        return result.get("value")
+    else:
+        return asyncio.run(coro)
 
 
 class ControlarLuzTool(Tool):
@@ -52,7 +86,7 @@ class ControlarLuzTool(Tool):
             data = {"entity_id": entity_id}
             if brightness is not None and action == "on":
                 data["brightness"] = brightness
-            asyncio.run(ha.call_service("light", service, data))
+            run_async(ha.call_service("light", service, data))
             return ToolResult.ok(f"Luz '{entity_id}' → {action}")
         except Exception as e:
             return ToolResult.fail(f"Error al controlar luz: {e}")
@@ -91,11 +125,11 @@ class ControlarClimateTool(Tool):
             return ToolResult.fail("No se especificó el entity_id del clima.")
         try:
             if mode:
-                asyncio.run(ha.call_service("climate", "set_hvac_mode",
-                            {"entity_id": entity_id, "hvac_mode": mode}))
+                run_async(ha.call_service("climate", "set_hvac_mode",
+                          {"entity_id": entity_id, "hvac_mode": mode}))
             if temperature:
-                asyncio.run(ha.call_service("climate", "set_temperature",
-                            {"entity_id": entity_id, "temperature": temperature}))
+                run_async(ha.call_service("climate", "set_temperature",
+                          {"entity_id": entity_id, "temperature": temperature}))
             return ToolResult.ok(f"Clima '{entity_id}' actualizado correctamente.")
         except Exception as e:
             return ToolResult.fail(f"Error al controlar clima: {e}")
@@ -123,7 +157,7 @@ class ConsultarEstadoTool(Tool):
         if not entity_id:
             return ToolResult.fail("No se especificó el entity_id.")
         try:
-            state = asyncio.run(ha.get_state(entity_id))
+            state = run_async(ha.get_state(entity_id))
             return ToolResult.ok(
                 f"{entity_id}: {state['state']} | "
                 f"atributos: {state.get('attributes', {})}"
@@ -154,7 +188,7 @@ class EjecutarEscenaTool(Tool):
         if not entity_id:
             return ToolResult.fail("No se especificó el entity_id de la escena.")
         try:
-            asyncio.run(ha.call_service("scene", "turn_on", {"entity_id": entity_id}))
+            run_async(ha.call_service("scene", "turn_on", {"entity_id": entity_id}))
             return ToolResult.ok(f"Escena '{entity_id}' activada correctamente.")
         except Exception as e:
             return ToolResult.fail(f"Error al ejecutar escena: {e}")
@@ -190,18 +224,18 @@ class ControlarTVTool(Tool):
             return ToolResult.fail("No se especificó ninguna acción.")
         try:
             if action in ("turn_on", "turn_off"):
-                asyncio.run(ha.call_service("media_player", action, {"entity_id": entity_id}))
+                run_async(ha.call_service("media_player", action, {"entity_id": entity_id}))
             elif action == "volume_up":
-                asyncio.run(ha.call_service("media_player", "volume_up", {"entity_id": entity_id}))
+                run_async(ha.call_service("media_player", "volume_up", {"entity_id": entity_id}))
             elif action == "volume_down":
-                asyncio.run(ha.call_service("media_player", "volume_down", {"entity_id": entity_id}))
+                run_async(ha.call_service("media_player", "volume_down", {"entity_id": entity_id}))
             elif action == "mute":
-                asyncio.run(ha.call_service("media_player", "volume_mute",
-                            {"entity_id": entity_id, "is_volume_muted": True}))
+                run_async(ha.call_service("media_player", "volume_mute",
+                          {"entity_id": entity_id, "is_volume_muted": True}))
             elif action == "pause":
-                asyncio.run(ha.call_service("media_player", "media_pause", {"entity_id": entity_id}))
+                run_async(ha.call_service("media_player", "media_pause", {"entity_id": entity_id}))
             elif action == "play":
-                asyncio.run(ha.call_service("media_player", "media_play", {"entity_id": entity_id}))
+                run_async(ha.call_service("media_player", "media_play", {"entity_id": entity_id}))
             return ToolResult.ok(f"TV → {action} ejecutado correctamente.")
         except Exception as e:
             return ToolResult.fail(f"Error al controlar el TV: {e}")
@@ -251,7 +285,7 @@ class AbrirAppTVTool(Tool):
             )
 
         try:
-            asyncio.run(ha.call_service("androidtv", "adb_command", {
+            run_async(ha.call_service("androidtv", "adb_command", {
                 "entity_id": entity_id,
                 "command": f"monkey -p {package} -c android.intent.category.LAUNCHER 1"
             }))
@@ -292,7 +326,7 @@ class BuscarYouTubeTVTool(Tool):
             query_encoded = urllib.parse.quote(query)
             url = (
                 f"https://www.googleapis.com/youtube/v3/search"
-                f"?part=snippet&q={query_encoded}&type=video&maxResults=1&key={api_key}"
+                f"?part=snippet&q={query_encoded}&type=video&maxResults=5&key={api_key}"
             )
             with urllib.request.urlopen(url) as response:
                 data = json.loads(response.read().decode())
@@ -301,11 +335,21 @@ class BuscarYouTubeTVTool(Tool):
             if not items:
                 return ToolResult.fail(f"No se encontraron videos para '{query}'.")
 
-            video_id = items[0]["id"]["videoId"]
-            video_url = f"https://www.youtube.com/watch?v={video_id}"
-            video_title = items[0]["snippet"]["title"]
+            video_id = None
+            video_title = ""
+            for item in items:
+                vid = item.get("id", {}).get("videoId")
+                if vid:
+                    video_id = vid
+                    video_title = item.get("snippet", {}).get("title", query)
+                    break
 
-            asyncio.run(ha.call_service("androidtv", "adb_command", {
+            if not video_id:
+                return ToolResult.fail(f"No se encontró un video válido para '{query}'.")
+
+            video_url = f"https://www.youtube.com/watch?v={video_id}"
+
+            run_async(ha.call_service("androidtv", "adb_command", {
                 "entity_id": entity_id,
                 "command": f'am start -a android.intent.action.VIEW -d "{video_url}"'
             }))
