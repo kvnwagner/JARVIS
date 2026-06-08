@@ -30,6 +30,41 @@ APP_ALIASES: dict[str, str] = {
     "calculadora": "calc",
 }
 
+# Rutas comunes para apps que no suelen estar en PATH
+APP_FALLBACK_PATHS: dict[str, list[str]] = {
+    "spotify": [
+        os.path.expandvars(r"%APPDATA%\Spotify\Spotify.exe"),
+        os.path.expandvars(r"%LOCALAPPDATA%\Spotify\Spotify.exe"),
+    ],
+    "discord": [
+        os.path.expandvars(r"%LOCALAPPDATA%\Discord\Update.exe"),
+        os.path.expandvars(r"%LOCALAPPDATA%\Discord\app-*\Discord.exe"),
+    ],
+    "zoom": [
+        os.path.expandvars(r"%APPDATA%\Zoom\bin\Zoom.exe"),
+        os.path.expandvars(r"%PROGRAMFILES%\Zoom\bin\Zoom.exe"),
+        os.path.expandvars(r"%PROGRAMFILES(X86)%\Zoom\bin\Zoom.exe"),
+    ],
+}
+
+
+def _resolve_executable(executable: str) -> str | None:
+    """
+    Intenta encontrar el ejecutable en PATH primero,
+    luego en rutas de fallback conocidas.
+    Retorna la ruta final o None si no se encuentra.
+    """
+    # 1. Buscar en PATH
+    if shutil.which(executable):
+        return executable
+
+    # 2. Buscar en rutas de fallback
+    for path in APP_FALLBACK_PATHS.get(executable, []):
+        if os.path.exists(path):
+            return path
+
+    return None
+
 
 
 class OpenAppTool(Tool):
@@ -57,34 +92,20 @@ class OpenAppTool(Tool):
         # Resolver alias
         executable = APP_ALIASES.get(app_name, app_name)
 
-        if app_name == "whatsapp":
-            subprocess.Popen(
-                ["explorer.exe", "shell:AppsFolder\5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App"]
-            )
-            return ToolResult.ok("WhatsApp abierto correctamente.")
-
-
-        # Verificar si el ejecutable existe en PATH
-        if not shutil.which(executable):
+        # Resolver ruta final
+        resolved = _resolve_executable(executable)
+        if not resolved:
             return ToolResult.fail(
-                f"No se encontró '{executable}' en el sistema. "
-                f"Verifica que la aplicación esté instalada y en el PATH."
+                f"No se encontró '{app_name}' en el sistema. "
+                f"Verifica que la aplicación esté instalada."
             )
 
         try:
-            # creationflags=0x00000008 → DETACHED_PROCESS (no bloquea)
-            if executable.startswith("shell:AppsFolder"):
-                subprocess.Popen(
-                    f'explorer.exe "{executable}"',
-                    shell=True,
-                    creationflags=subprocess.DETACHED_PROCESS
-                )
-            else:
-                subprocess.Popen(
-                    executable,
-                    shell=True,
-                    creationflags=subprocess.DETACHED_PROCESS
-                )
+            subprocess.Popen(
+                [resolved],
+                creationflags=subprocess.DETACHED_PROCESS,
+                close_fds=True
+            )
             return ToolResult.ok(f"Aplicación '{app_name}' abierta correctamente.")
         except Exception as e:
             return ToolResult.fail(f"Error al abrir '{app_name}': {e}")
