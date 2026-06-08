@@ -224,7 +224,8 @@ async def chat_ws(websocket: WebSocket):
                         "role": "assistant",
                         "content": result.response,
                         "tool_used": result.tool_used,
-                        "success": result.success,
+                        "tool_success": result.success,
+                        "tool_output": result.response if result.tool_used else None,
                     },
                 })
             except HTTPException as exc:
@@ -250,6 +251,15 @@ def execute(req: ExecuteRequest):
         output=result.output,
         error=result.error,
     )
+
+
+@app.get("/tools/status")
+def tools_status():
+    """Estado y lista de todas las tools registradas."""
+    return {
+        "tools": [{"name": t.name, "description": t.description} for t in registry.get_all()],
+        "count": len(registry.get_all()),
+    }
 
 
 @app.get("/memory")
