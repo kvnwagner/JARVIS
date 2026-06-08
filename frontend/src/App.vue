@@ -142,7 +142,7 @@ function connectWebSocket() {
   };
 }
 
-function handleSocketPayload(payload) {
+async function handleSocketPayload(payload) {
   if (payload.type === "status") {
     health.value = {
       ...(health.value || {}),
@@ -162,7 +162,15 @@ function handleSocketPayload(payload) {
   }
 
   if (payload.type === "done") {
-    finalizeStreamingMessage(payload.message?.content || streamText.value, payload.message?.tool_used);
+    finalizeStreamingMessage(
+      payload.message?.content || streamText.value,
+      payload.message?.tool_used,
+      payload.message?.tool_success ?? null,
+      payload.message?.tool_output ?? null,
+    );
+    if (payload.message?.tool_used) {
+      await refreshBackendState();
+    }
   }
 
   if (payload.type === "error") {
@@ -193,14 +201,16 @@ function updateStreamingMessage(content) {
   if (item) item.content = content;
 }
 
-function finalizeStreamingMessage(content, toolUsed = null) {
+function finalizeStreamingMessage(content, toolUsed = null, toolSuccess = null, toolOutput = null) {
   const item = messages.value.find((message) => message.id === streamId.value);
   if (item) {
     item.content = content;
     item.streaming = false;
     item.toolUsed = toolUsed;
+    item.toolSuccess = toolSuccess;
+    item.toolOutput = toolOutput;
   } else {
-    pushMessage("assistant", content, { toolUsed });
+    pushMessage("assistant", content, { toolUsed, toolSuccess, toolOutput });
   }
   sending.value = false;
   typing.value = false;
@@ -238,7 +248,7 @@ async function sendWithRest(text) {
       throw new Error(detail.detail || "Error de backend");
     }
     const data = await response.json();
-    await animateRestResponse(data.response, data.tool_used);
+    await animateRestResponse(data.response, data.tool_used, data.success ?? null, data.response && data.tool_used ? data.response : null);
   } catch (error) {
     finalizeStreamingMessage(error.message || "Backend no disponible.");
   } finally {
@@ -246,14 +256,14 @@ async function sendWithRest(text) {
   }
 }
 
-async function animateRestResponse(text, toolUsed) {
+async function animateRestResponse(text, toolUsed, toolSuccess = null, toolOutput = null) {
   streamText.value = "";
   for (const part of text.match(/.{1,18}(\s|$)/g) || [text]) {
     streamText.value += part;
     updateStreamingMessage(streamText.value);
     await new Promise((resolve) => setTimeout(resolve, 22));
   }
-  finalizeStreamingMessage(text, toolUsed);
+  finalizeStreamingMessage(text, toolUsed, toolSuccess, toolOutput);
 }
 
 function setupSpeechRecognition() {
@@ -413,7 +423,10 @@ function formatTime(value) {
               <time>{{ formatTime(message.time) }}</time>
             </div>
             <p>{{ message.content }}</p>
-            <small v-if="message.toolUsed">Tool: {{ message.toolUsed }}</small>
+            <div v-if="message.toolUsed" class="tool-badge" :class="{ 'tool-ok': message.toolSuccess, 'tool-fail': message.toolSuccess === false }">
+              <span>{{ message.toolSuccess ? '✦' : '✕' }} {{ message.toolUsed }}</span>
+              <span v-if="message.toolOutput" class="tool-output">{{ message.toolOutput.slice(0, 100) }}</span>
+            </div>
           </div>
         </article>
 

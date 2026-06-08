@@ -559,3 +559,27 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
 }
+
+.tool-badge {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  background: rgba(255, 255, 255, 0.06);
+  border-left: 2px solid #8a97a6;
+}
+
+.tool-ok {
+  border-left-color: #50f6ff;
+}
+
+.tool-fail {
+  border-left-color: #ff5a7a;
+}
+
+.tool-output {
+  opacity: 0.65;
+}
