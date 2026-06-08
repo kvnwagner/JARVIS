@@ -11,31 +11,23 @@ from core.interfaces import Tool, ToolResult
 
 # Mapa de nombres amigables → ejecutables reales
 APP_ALIASES: dict[str, str] = {
-    "spotify":        "spotify",
-    "chrome":         "chrome",
-    "google chrome":  "chrome",
-    "firefox":        "firefox",
-    "vscode":         "code",
-    "visual studio code": "code",
-    "notepad":        "notepad",
-    "bloc de notas":  "notepad",
-    "explorer":       "explorer",
-    "explorador":     "explorer",
-    "calculadora":    "calc",
-    "calculator":     "calc",
-    "paint":          "mspaint",
-    "cmd":            "cmd",
-    "powershell":     "powershell",
-    "task manager":   "taskmgr",
-    "administrador de tareas": "taskmgr",
-    "discord":        "discord",
-    "slack":          "slack",
-    "zoom":           "zoom",
-    "obs":            "obs64",
-    "vlc":            "vlc",
-    "word":           "winword",
-    "excel":          "excel",
-    "powerpoint":     "powerpnt",
+    "spotify": "spotify",
+
+    "chrome": r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+    "google chrome": r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+
+    "vscode": r"C:\Users\qandr\AppData\Local\Programs\Microsoft VS Code\Code.exe",
+    "visual studio code": r"C:\Users\qandr\AppData\Local\Programs\Microsoft VS Code\Code.exe",
+
+    "whatsapp": "shell:AppsFolder\\5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App",
+
+    "discord": "discord",
+    "telegram": "telegram",
+    "steam": "steam",
+
+    "notepad": "notepad",
+    "explorer": "explorer",
+    "calculadora": "calc",
 }
 
 # Rutas comunes para apps que no suelen estar en PATH
@@ -72,6 +64,7 @@ def _resolve_executable(executable: str) -> str | None:
             return path
 
     return None
+
 
 
 class OpenAppTool(Tool):

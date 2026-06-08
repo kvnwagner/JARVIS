@@ -100,7 +100,16 @@ class SpotifyTool(Tool):
         "properties": {
             "action": {
                 "type": "string",
-                "enum": ["play", "pause", "next", "previous", "current", "search"]
+                "enum": [
+                "play",
+                "pause",
+                "next",
+                "previous",
+                "current",
+                "search",
+                "album",
+                "artist"
+            ]
             },
             "query": {
                 "type": "string",
