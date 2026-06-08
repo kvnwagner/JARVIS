@@ -21,6 +21,12 @@ class JarvisTTS:
         self._rate = rate
         self._volume = volume
 
+        # Control de pausa
+        self._paused = False
+        self._pause_event = threading.Event()
+        self._pause_event.set()  # inicia sin pausa
+        self._playback_proc: subprocess.Popen | None = None
+
         try:
             import edge_tts  # noqa: F401
         except ImportError as exc:
@@ -48,8 +54,15 @@ class JarvisTTS:
 
                 mp3_path = os.path.join(tempfile.gettempdir(), "jarvis_tts.mp3")
 
+                # Velocidad original + 25% → rate="+25%"
+                rate_str = "+25%"
+
                 async def generate_audio() -> None:
-                    communicate = edge_tts.Communicate(text.strip(), self._voice)
+                    communicate = edge_tts.Communicate(
+                        text.strip(),
+                        self._voice,
+                        rate=rate_str,
+                    )
                     await communicate.save(mp3_path)
 
                 loop = asyncio.new_event_loop()
@@ -66,8 +79,51 @@ class JarvisTTS:
         thread = threading.Thread(target=self.speak, args=(text,), daemon=True)
         thread.start()
 
+    def pause(self) -> None:
+        """Pausa la reproducción actual."""
+        if not self._paused:
+            self._paused = True
+            self._pause_event.clear()
+            if self._playback_proc and self._playback_proc.poll() is None:
+                # Suspende el proceso de PowerShell en Windows
+                subprocess.run(
+                    ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+                     f"Suspend-Process -Id {self._playback_proc.pid} -ErrorAction SilentlyContinue"],
+                    capture_output=True,
+                    timeout=5,
+                    check=False,
+                )
+            logger.info("TTS pausado")
+
+    def resume(self) -> None:
+        """Reanuda la reproducción pausada."""
+        if self._paused:
+            self._paused = False
+            self._pause_event.set()
+            if self._playback_proc and self._playback_proc.poll() is None:
+                subprocess.run(
+                    ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+                     f"Resume-Process -Id {self._playback_proc.pid} -ErrorAction SilentlyContinue"],
+                    capture_output=True,
+                    timeout=5,
+                    check=False,
+                )
+            logger.info("TTS reanudado")
+
+    def toggle_pause(self) -> bool:
+        """Alterna entre pausa y reproducción. Retorna True si quedó pausado."""
+        if self._paused:
+            self.resume()
+        else:
+            self.pause()
+        return self._paused
+
     def stop(self) -> None:
-        pass
+        """Detiene la reproducción completamente."""
+        self._paused = False
+        self._pause_event.set()
+        if self._playback_proc and self._playback_proc.poll() is None:
+            self._playback_proc.terminate()
 
     def toggle(self) -> bool:
         self._enabled = not self._enabled
@@ -92,9 +148,10 @@ if ($player.NaturalDuration.HasTimeSpan) {{
 Start-Sleep -Seconds ([Math]::Max($dur, 1) + 0.3)
 $player.Close()
 """
-        subprocess.run(
+        self._playback_proc = subprocess.Popen(
             ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_script],
-            capture_output=True,
-            timeout=60,
-            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
+        self._playback_proc.wait()
+        self._playback_proc = None
