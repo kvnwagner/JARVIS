@@ -2,7 +2,7 @@
 # JARVIS — Dependencias del proyecto
 # Instalar con: pip install -r requirements.txt
 #
-# NOTA: pywin32 es solo para Windows
+# NOTA: pywin32 es solo para Windowss
 # ================================================================
 
 # API
