@@ -13,9 +13,9 @@ logger = logging.getLogger("jarvis.llm")
 class CerebrasProvider:
     """Cliente para Cerebras API."""
 
-    def __init__(self, api_key: str = ""):
+    def __init__(self, api_key: str = "", model: str = ""):
         self.api_key = api_key or os.getenv("CEREBRAS_API_KEY", "")
-        self.model = os.getenv("LLM_MODEL", "llama-3.3-70b")
+        self.model = model or os.getenv("LLM_MODEL", "gpt-oss-120b")
 
         if not self.api_key:
             raise ValueError("Falta CEREBRAS_API_KEY en el archivo .env")

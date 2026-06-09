@@ -34,7 +34,7 @@ class Container:
         self.logger = JarvisLogger(self.bus)
 
         # 4. Tool Registry
-        self.tool_registry = ToolRegistry(self.bus)
+        self.tool_registry = ToolRegistry(self.bus, auto_subscribe=False)
 
         # 5. Registrar Windows Tools
         for tool in WINDOWS_TOOLS:
