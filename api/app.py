@@ -1,13 +1,5 @@
-# ================================================================
-# api/app.py
-# Fase 4 — FastAPI
-# Expone el agente Jarvis como una API REST.
-# Endpoints:
-#   POST /chat        — enviar mensaje y recibir respuesta
-#   POST /execute     — ejecutar una tool directamente
-#   GET  /memory      — consultar memoria reciente
-#   GET  /tools       — listar tools disponibles
-#   GET  /health      — estado del sistema
+﻿# ================================================================
+# api/app.py - Fase 4 – FastAPI con CerebrasProvider
 # ================================================================
 
 from fastapi import FastAPI, HTTPException
@@ -22,10 +14,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.container import Container
 from core.interfaces import LLMMessage, Event
 from infrastructure import events
-from llm import GeminiProvider
+from llm.cerebras_provider import CerebrasProvider
 from memory.memory_manager import MemoryManager
-
-# ─── App ─────────────────────────────────────────────────────
 
 app = FastAPI(
     title="JARVIS API",
@@ -40,14 +30,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ─── Estado global ────────────────────────────────────────────
-
-container  = Container()
-registry   = container.tool_registry
-bus        = container.bus
-memory     = MemoryManager(db_path="jarvis.db")
-llm: Optional[GeminiProvider] = None
-messages:  list[LLMMessage] = []
+container = Container()
+registry  = container.tool_registry
+bus       = container.bus
+memory    = MemoryManager(db_path="jarvis.db")
+llm: Optional[CerebrasProvider] = None
+messages: list[LLMMessage] = []
 
 SYSTEM_PROMPT = """
 Eres Jarvis, un asistente local. Responde en español, claro y breve.
@@ -60,13 +48,31 @@ explica qué puedes hacer con el estado actual del proyecto.
 @app.on_event("startup")
 def startup():
     global llm, messages
-    config = container.config
-    if config.gemini_api_key:
-        llm = GeminiProvider(api_key=config.gemini_api_key, model=config.llm_model)
+    api_key = os.getenv("CEREBRAS_API_KEY", "")
+    if api_key:
+        llm = CerebrasProvider(api_key=api_key)
     messages = [LLMMessage(role="system", content=SYSTEM_PROMPT)]
 
 
-# ─── Schemas ─────────────────────────────────────────────────
+@app.get("/health")
+def health():
+    return {
+        "status": "ok",
+        "llm":    llm.model if llm else "no configurado",
+        "tools":  len(registry.get_all()),
+        "memory": memory.stats(),
+    }
+
+
+@app.get("/tools")
+def get_tools():
+    return {
+        "tools": [
+            {"name": t.name, "description": t.description}
+            for t in registry.get_all()
+        ]
+    }
+
 
 class ChatRequest(BaseModel):
     message: str
@@ -87,53 +93,73 @@ class ExecuteResponse(BaseModel):
     error:   Optional[str] = None
 
 
-# ─── Endpoints ───────────────────────────────────────────────
 
-@app.get("/health")
-def health():
-    """Estado del sistema."""
-    return {
-        "status":  "ok",
-        "llm":     llm.model_name if llm else "no configurado",
-        "tools":   len(registry.get_all()),
-        "memory":  memory.stats(),
-    }
+import webbrowser as _wb
+import urllib.parse as _up
+import os as _os
 
+_SITES = {
+    "abre youtube":      "https://youtube.com",
+    "abre facebook":     "https://facebook.com",
+    "abre gmail":        "https://mail.google.com",
+    "abre instagram":    "https://instagram.com",
+    "abre disney":       "https://www.disneyplus.com",
+    "abre disney plus":  "https://www.disneyplus.com",
+    "abre disney+":      "https://www.disneyplus.com",
+    "abre netflix":      "https://www.netflix.com",
+    "abre prime":        "https://www.primevideo.com",
+    "abre prime video":  "https://www.primevideo.com",
+    "abre twitch":       "https://www.twitch.tv",
+    "abre twitter":      "https://twitter.com",
+    "abre x":            "https://twitter.com",
+    "abre whatsapp":     "https://web.whatsapp.com",
+    "abre reddit":       "https://www.reddit.com",
+    "abre linkedin":     "https://www.linkedin.com",
+    "abre tiktok":       "https://www.tiktok.com",
+}
 
-@app.get("/tools")
-def get_tools():
-    """Lista todas las tools disponibles."""
-    return {
-        "tools": [
-            {
-                "name":        t.name,
-                "description": t.description,
-            }
-            for t in registry.get_all()
-        ]
-    }
-
+def _shortcut(msg: str):
+    low = msg.strip().lower()
+    # Ignorar prefijos comunes
+    for prefix in ["jarvis ", "hey jarvis ", "oye jarvis "]:
+        if low.startswith(prefix):
+            low = low[len(prefix):]
+            break
+    if low in _SITES:
+        _wb.open(_SITES[low])
+        return f"Abriendo {_SITES[low]}"
+    if low.startswith("busca ") or low.startswith("buscar "):
+        q = msg[7:].strip() if low.startswith("buscar ") else msg[6:].strip()
+        _wb.open("https://www.google.com/search?q=" + _up.quote(q))
+        return f"Buscando {q} en Google"
+    if low.startswith("youtube "):
+        q = msg[8:].strip()
+        _wb.open("https://www.youtube.com/results?search_query=" + _up.quote(q))
+        return f"Buscando {q} en YouTube"
+    if low == "abre documentos":
+        _os.startfile(r"C:\Users\qandr\Documents"); return "Abriendo Documentos"
+    if low == "abre descargas":
+        _os.startfile(r"C:\Users\qandr\Downloads"); return "Abriendo Descargas"
+    if low == "abre escritorio":
+        _os.startfile(r"C:\Users\qandr\Desktop"); return "Abriendo Escritorio"
+    return None
 
 @app.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest):
-    """Envía un mensaje a Jarvis y recibe una respuesta."""
     if not llm:
-        raise HTTPException(status_code=503, detail="LLM no configurado. Verifica GEMINI_API_KEY en .env")
+        raise HTTPException(status_code=503, detail="LLM no configurado. Verifica CEREBRAS_API_KEY en .env")
 
-    # Guardar en memoria RAM
+    _sc = _shortcut(req.message)
+    if _sc:
+        return ChatResponse(response=_sc, tool_used=None, success=True)
     memory.save_message(req.message, source="user")
-
-    # Publicar evento
     bus.publish(Event(
         name=events.USER_MESSAGE,
         payload={"text": req.message},
         source="api"
     ))
 
-    # Agregar al historial
     messages.append(LLMMessage(role="user", content=req.message))
-
-    # Llamar al LLM
     response = llm.chat(messages, tools=registry.get_all())
 
     tool_used = None
@@ -151,11 +177,7 @@ def chat(req: ChatRequest):
         messages.append(LLMMessage(role="assistant", content=reply))
         memory.save_message(reply, source="assistant")
 
-        return ChatResponse(
-            response=reply,
-            tool_used=tool_used,
-            success=result.success
-        )
+        return ChatResponse(response=reply, tool_used=tool_used, success=result.success)
 
     reply = response.text or "Sin respuesta."
     messages.append(LLMMessage(role="assistant", content=reply))
@@ -164,9 +186,36 @@ def chat(req: ChatRequest):
     return ChatResponse(response=reply, tool_used=None, success=True)
 
 
+
+_tts_instance = None
+
+def _get_tts():
+    global _tts_instance
+    if _tts_instance is None:
+        from voice.tts import JarvisTTS
+        _tts_instance = JarvisTTS()
+    return _tts_instance
+
+@app.post("/tts/speak")
+def tts_speak(req: dict):
+    try:
+        text = req.get("text", "")
+        if text:
+            _get_tts().speak_async(text)
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+@app.post("/tts/stop")
+def tts_stop():
+    try:
+        _get_tts().stop()
+    except Exception:
+        pass
+    return {"ok": True}
+
 @app.post("/execute", response_model=ExecuteResponse)
 def execute(req: ExecuteRequest):
-    """Ejecuta una tool directamente sin pasar por el LLM."""
     tool = registry.get(req.tool)
     if not tool:
         raise HTTPException(status_code=404, detail=f"Tool '{req.tool}' no encontrada.")
@@ -182,12 +231,11 @@ def execute(req: ExecuteRequest):
 
 @app.get("/memory")
 def get_memory(n: int = 20):
-    """Retorna las últimas n entradas de memoria."""
     recent = memory.get_recent_facts(n=n)
     conversation = memory.get_conversation_context(n=n)
     return {
         "conversation": conversation,
-        "facts":        [
+        "facts": [
             {
                 "id":        e.id,
                 "content":   e.content,

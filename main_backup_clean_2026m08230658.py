@@ -247,6 +247,7 @@ def main() -> None:
 
         txt_low = user_input.lower()
 
+        # ── Modo trabajo ──────────────────────────────────────
         if txt_low in ["hora de trabajar", "modo trabajo"]:
             import subprocess
             apps = [
@@ -265,9 +266,12 @@ def main() -> None:
                 voice.speak_async(resp)
             continue
 
+        # ── Apps por nombre ───────────────────────────────────
         if txt_low in ["abre whatsapp", "abrir whatsapp"]:
             import subprocess
-            subprocess.Popen(["explorer.exe", "shell:AppsFolder\5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App"])
+            subprocess.Popen(
+                ["explorer.exe", "shell:AppsFolder\5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App"]
+            )
             resp = "Abriendo WhatsApp."
             print(f"Jarvis: {resp}")
             if voice:
@@ -276,13 +280,17 @@ def main() -> None:
 
         if txt_low in ["abre chrome", "abrir chrome"]:
             import subprocess
-            subprocess.Popen(r"C:\Program Files\Google\Chrome\Application\chrome.exe", shell=True)
+            subprocess.Popen(
+                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                shell=True
+            )
             resp = "Abriendo Chrome."
             print(f"Jarvis: {resp}")
             if voice:
                 voice.speak_async(resp)
             continue
 
+        # ── Carpetas del sistema ──────────────────────────────
         if txt_low == "abre documentos":
             import os
             os.startfile(r"C:\Users\qandr\Documents")
@@ -303,6 +311,7 @@ def main() -> None:
             os.startfile(r"C:\Users\qandr\OneDrive\Desktop\JARVIS")
             continue
 
+        # ── Sitios web ────────────────────────────────────────
         _SITES = {
             "abre facebook":    "https://facebook.com",
             "abre youtube":     "https://youtube.com",
@@ -317,6 +326,7 @@ def main() -> None:
             webbrowser.open(_SITES[txt_low])
             continue
 
+        # ── Busquedas Google ──────────────────────────────────
         if txt_low.startswith("busca ") or txt_low.startswith("buscar "):
             import webbrowser, urllib.parse
             prefix_len = 7 if txt_low.startswith("buscar ") else 6
@@ -328,16 +338,21 @@ def main() -> None:
                 voice.speak_async(resp)
             continue
 
+        # ── YouTube en PC ─────────────────────────────────────
         if txt_low.startswith("youtube "):
             import webbrowser, urllib.parse
             query = user_input[8:].strip()
-            webbrowser.open("https://www.youtube.com/results?search_query=" + urllib.parse.quote(query))
+            webbrowser.open(
+                "https://www.youtube.com/results?search_query=" + urllib.parse.quote(query)
+            )
             continue
 
+        # ── Solo TV si se especifica explicitamente ───────────
         if "en el televisor" in txt_low or "en la tv" in txt_low:
             print("Jarvis: Ejecutando comando para el televisor")
             continue
 
+        # ── Control del sistema ───────────────────────────────
         if txt_low == "apaga el computador":
             import os
             os.system("shutdown /s /t 30")
@@ -375,6 +390,7 @@ def main() -> None:
             os.system("rundll32.exe user32.dll,LockWorkStation")
             continue
 
+        # ── Carpetas nuevas ───────────────────────────────────
         if txt_low.startswith("crea carpeta "):
             from pathlib import Path
             nombre = user_input[13:].strip()
@@ -385,8 +401,6 @@ def main() -> None:
             if voice:
                 voice.speak_async(resp)
             continue
-
-
         event_name = events.USER_VOICE_INPUT if input_source == "voice" else events.USER_MESSAGE
         bus.publish(Event(name=event_name, payload={"text": user_input}, source="cli"))
         messages.append(LLMMessage(role="user", content=user_input))

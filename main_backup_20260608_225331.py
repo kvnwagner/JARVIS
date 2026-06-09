@@ -249,39 +249,59 @@ def main() -> None:
 
         if txt_low in ["hora de trabajar", "modo trabajo"]:
             import subprocess
+
             apps = [
                 r"C:\Users\qandr\AppData\Local\Programs\Microsoft VS Code\Code.exe",
                 r"C:\Program Files\Google\Chrome\Application\chrome.exe",
                 "spotify"
             ]
+
             for app in apps:
                 try:
                     subprocess.Popen(app, shell=True)
                 except Exception as e:
                     print(f"Error abriendo {app}: {e}")
+
             resp = "Iniciando modo trabajo."
             print(f"Jarvis: {resp}")
+
             if voice:
                 voice.speak_async(resp)
+
             continue
 
         if txt_low in ["abre whatsapp", "abrir whatsapp"]:
             import subprocess
-            subprocess.Popen(["explorer.exe", "shell:AppsFolder\5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App"])
+
+            subprocess.Popen(
+                ["explorer.exe", "shell:AppsFolder\5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App"]
+            )
+
             resp = "Abriendo WhatsApp."
             print(f"Jarvis: {resp}")
+
             if voice:
                 voice.speak_async(resp)
+
             continue
 
         if txt_low in ["abre chrome", "abrir chrome"]:
             import subprocess
-            subprocess.Popen(r"C:\Program Files\Google\Chrome\Application\chrome.exe", shell=True)
+
+            subprocess.Popen(
+                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                shell=True
+            )
+
             resp = "Abriendo Chrome."
             print(f"Jarvis: {resp}")
+
             if voice:
                 voice.speak_async(resp)
+
             continue
+
+
 
         if txt_low == "abre documentos":
             import os
@@ -303,87 +323,261 @@ def main() -> None:
             os.startfile(r"C:\Users\qandr\OneDrive\Desktop\JARVIS")
             continue
 
-        _SITES = {
-            "abre facebook":    "https://facebook.com",
-            "abre youtube":     "https://youtube.com",
-            "abre gmail":       "https://mail.google.com",
-            "abre instagram":   "https://instagram.com",
-            "abre disney":      "https://www.disneyplus.com",
-            "abre netflix":     "https://www.netflix.com",
-            "abre prime video": "https://www.primevideo.com",
-        }
-        if txt_low in _SITES:
+
+        if txt_low == "abre facebook":
             import webbrowser
-            webbrowser.open(_SITES[txt_low])
+            webbrowser.open("https://facebook.com")
             continue
 
-        if txt_low.startswith("busca ") or txt_low.startswith("buscar "):
-            import webbrowser, urllib.parse
-            prefix_len = 7 if txt_low.startswith("buscar ") else 6
-            query = user_input[prefix_len:].strip()
-            webbrowser.open("https://www.google.com/search?q=" + urllib.parse.quote(query))
+        if txt_low == "abre youtube":
+            import webbrowser
+            webbrowser.open("https://youtube.com")
+            continue
+
+        if txt_low == "abre gmail":
+            import webbrowser
+            webbrowser.open("https://mail.google.com")
+            continue
+
+        if txt_low == "abre instagram":
+            import webbrowser
+            webbrowser.open("https://instagram.com")
+            continue
+
+        if txt_low.startswith("busca "):
+            import webbrowser
+            import urllib.parse
+
+            query = user_input[6:].strip()
+
+            url = "https://www.google.com/search?q=" + urllib.parse.quote(query)
+
+            webbrowser.open(url)
+
             resp = f"Buscando {query}"
             print(f"Jarvis: {resp}")
+
             if voice:
                 voice.speak_async(resp)
+
             continue
 
-        if txt_low.startswith("youtube "):
-            import webbrowser, urllib.parse
-            query = user_input[8:].strip()
-            webbrowser.open("https://www.youtube.com/results?search_query=" + urllib.parse.quote(query))
+        if txt_low.startswith("buscar "):
+            import webbrowser
+            import urllib.parse
+
+            query = user_input[7:].strip()
+
+            url = "https://www.google.com/search?q=" + urllib.parse.quote(query)
+
+            webbrowser.open(url)
+
+            resp = f"Buscando {query}"
+            print(f"Jarvis: {resp}")
+
+            if voice:
+                voice.speak_async(resp)
+
             continue
+
+
+
+        if txt_low.startswith("busca "):
+            import webbrowser
+            import urllib.parse
+
+            query = user_input[6:].strip()
+
+            webbrowser.open(
+                "https://www.google.com/search?q=" +
+                urllib.parse.quote(query)
+            )
+
+            resp = f"Buscando {query}"
+
+            print(f"Jarvis: {resp}")
+
+            if voice:
+                voice.speak_async(resp)
+
+            continue
+
+        if txt_low.startswith("buscar "):
+            import webbrowser
+            import urllib.parse
+
+            query = user_input[7:].strip()
+
+            webbrowser.open(
+                "https://www.google.com/search?q=" +
+                urllib.parse.quote(query)
+            )
+
+            resp = f"Buscando {query}"
+
+            print(f"Jarvis: {resp}")
+
+            if voice:
+                voice.speak_async(resp)
+
+            continue
+
+
+
+        # Plataformas de streaming -> PC por defecto
+
+        if txt_low == "abre disney":
+            import webbrowser
+            webbrowser.open("https://www.disneyplus.com")
+            continue
+
+        if txt_low == "abre netflix":
+            import webbrowser
+            webbrowser.open("https://www.netflix.com")
+            continue
+
+        if txt_low == "abre prime video":
+            import webbrowser
+            webbrowser.open("https://www.primevideo.com")
+            continue
+
+        if txt_low == "abre youtube":
+            import webbrowser
+            webbrowser.open("https://www.youtube.com")
+            continue
+
+        # Solo TV si se especifica expl?citamente
 
         if "en el televisor" in txt_low or "en la tv" in txt_low:
             print("Jarvis: Ejecutando comando para el televisor")
+            # aqu? ir? Home Assistant
             continue
+
+
+
+        if txt_low.startswith("youtube "):
+            import webbrowser
+            import urllib.parse
+
+            query = user_input[8:].strip()
+
+            webbrowser.open(
+                "https://www.youtube.com/results?search_query="
+                + urllib.parse.quote(query)
+            )
+
+            continue
+
+
 
         if txt_low == "apaga el computador":
             import os
+
             os.system("shutdown /s /t 30")
-            resp = "El computador se apagara en 30 segundos"
+
+            resp = "El computador se apagar? en 30 segundos"
+
             print(f"Jarvis: {resp}")
+
             if voice:
                 voice.speak_async(resp)
+
             continue
+
+
+
+        if txt_low == "abre documentos":
+            import os
+            os.startfile(r"C:\Users\qandr\Documents")
+            continue
+
+        if txt_low == "abre descargas":
+            import os
+            os.startfile(r"C:\Users\qandr\Downloads")
+            continue
+
+        if txt_low == "abre escritorio":
+            import os
+            os.startfile(r"C:\Users\qandr\Desktop")
+            continue
+
+
 
         if txt_low == "cancelar apagado":
             import os
+
             os.system("shutdown /a")
+
             resp = "Apagado cancelado"
+
             print(f"Jarvis: {resp}")
+
             if voice:
                 voice.speak_async(resp)
+
             continue
 
-        if txt_low == "reinicia el computador":
-            import os
-            os.system("shutdown /r /t 30")
-            resp = "El computador se reiniciara en 30 segundos"
-            print(f"Jarvis: {resp}")
-            if voice:
-                voice.speak_async(resp)
-            continue
 
-        if txt_low == "suspende el computador":
-            import os
-            os.system("rundll32.exe powrprof.dll,SetSuspendState 0,1,0")
-            continue
 
         if txt_low == "bloquea el computador":
             import os
+
             os.system("rundll32.exe user32.dll,LockWorkStation")
+
             continue
+
+
+
+        if txt_low == "reinicia el computador":
+            import os
+
+            os.system("shutdown /r /t 30")
+
+            resp = "El computador se reiniciar? en 30 segundos"
+
+            print(f"Jarvis: {resp}")
+
+            if voice:
+                voice.speak_async(resp)
+
+            continue
+
+
+
+        if txt_low == "suspende el computador":
+            import os
+
+            os.system("rundll32.exe powrprof.dll,SetSuspendState 0,1,0")
+
+            continue
+
+
+
+        if txt_low == "bloquea el computador":
+            import os
+
+            os.system("rundll32.exe user32.dll,LockWorkStation")
+
+            continue
+
+
 
         if txt_low.startswith("crea carpeta "):
             from pathlib import Path
+
             nombre = user_input[13:].strip()
+
             ruta = Path.home() / "Desktop" / nombre
+
             ruta.mkdir(parents=True, exist_ok=True)
+
             resp = f"Carpeta creada: {nombre}"
+
             print(f"Jarvis: {resp}")
+
             if voice:
                 voice.speak_async(resp)
+
             continue
 
 

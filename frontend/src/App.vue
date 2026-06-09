@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
   Activity,
@@ -65,7 +65,7 @@ onMounted(async () => {
   startReminderPolling();
   // Saludo inicial
   setTimeout(() => {
-    speakText("Hola señor, ¿cómo está? Estoy listo para ayudarlo el día de hoy.");
+    speakText("Hola seÃ±or, Â¿cÃ³mo estÃ¡? Estoy listo para ayudarlo el dÃ­a de hoy.");
   }, 1500);
 });
 
@@ -283,7 +283,7 @@ function startReminderPolling() {
       const res = await fetch(`${API_BASE}/reminders/alerts`);
       const data = await res.json();
       (data.alerts || []).forEach((alert) => {
-        const msg = `🔔 Recordatorio: ${alert.message}`;
+        const msg = `ðŸ”” Recordatorio: ${alert.message}`;
         pushMessage("assistant", msg, {
           toolUsed: "reminder",
           toolSuccess: true,
@@ -326,18 +326,8 @@ function setupSpeechRecognition() {
   rec.onend = () => {
     if (micState.value === "listening") {
       micState.value = "idle";
-      const text = input.value.trim().toLowerCase();
-      // Wake word: debe comenzar con "jarvis"
-      if (text.startsWith("jarvis")) {
-        // Quitar la wake word y enviar automáticamente
-        input.value = input.value.trim().replace(/^jarvis[,\s]*/i, "").trim();
-        if (input.value) {
-          sendMessage();
-        }
-      } else if (text) {
-        // Si habló pero sin wake word, limpiar y avisar
-        input.value = "";
-        speakText("Por favor, comience su solicitud diciendo Jarvis.");
+      if (input.value.trim()) {
+        sendMessage();
       }
     }
   };
@@ -492,7 +482,7 @@ function formatTime(value) {
             </div>
             <p>{{ message.content }}</p>
             <div v-if="message.toolUsed" class="tool-badge" :class="{ 'tool-ok': message.toolSuccess, 'tool-fail': message.toolSuccess === false }">
-              <span>{{ message.toolSuccess ? '✦' : '✕' }} {{ message.toolUsed }}</span>
+              <span>{{ message.toolSuccess ? 'âœ¦' : 'âœ•' }} {{ message.toolUsed }}</span>
               <span v-if="message.toolOutput" class="tool-output">{{ message.toolOutput.slice(0, 100) }}</span>
             </div>
           </div>
@@ -544,3 +534,5 @@ function formatTime(value) {
     </section>
   </main>
 </template>
+
+
