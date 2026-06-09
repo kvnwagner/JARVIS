@@ -292,23 +292,22 @@ class BuscarYouTubeTVTool(Tool):
             query_encoded = urllib.parse.quote(query)
             url = (
                 f"https://www.googleapis.com/youtube/v3/search"
-                f"?part=snippet&q={query_encoded}&type=video&maxResults=5&key={api_key}"
+                f"?part=snippet&q={query_encoded}&type=video&maxResults=1&key={api_key}"
             )
             with urllib.request.urlopen(url) as response:
                 data = json.loads(response.read().decode())
 
             items = data.get("items", [])
-            videos = [i for i in items if i.get("id", {}).get("kind") == "youtube#video"]
-            if not videos:
+            if not items:
                 return ToolResult.fail(f"No se encontraron videos para '{query}'.")
 
-            video_id = videos[0]["id"]["videoId"]
+            video_id = items[0]["id"]["videoId"]
             video_url = f"https://www.youtube.com/watch?v={video_id}"
-            video_title = videos[0]["snippet"]["title"]
+            video_title = items[0]["snippet"]["title"]
 
             asyncio.run(ha.call_service("androidtv", "adb_command", {
                 "entity_id": entity_id,
-                "command": f'am start -n com.google.android.youtube.tv/com.google.android.apps.youtube.tv.activity.ShellActivity -a android.intent.action.VIEW -d "{video_url}"'
+                "command": f'am start -a android.intent.action.VIEW -d "{video_url}"'
             }))
             return ToolResult.ok(f"Reproduciendo en el TV: {video_title}")
         except Exception as e:

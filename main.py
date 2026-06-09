@@ -35,13 +35,6 @@ HERRAMIENTAS DISPONIBLES:
 - spotify: para reproducir, poner o escuchar música en el computador. Parámetros: action=play y query=nombre de canción o artista. NUNCA uses action=search para reproducir.
 - open_app: para abrir aplicaciones del computador que NO sean el televisor.
 - screenshot: para tomar capturas de pantalla.
-- reminder: para crear, listar o cancelar recordatorios a una hora exacta del día.
-  Usa action=set con message y time en formato HH:MM (24h).
-  Convierte lenguaje natural: "a las 8pm" → time="20:00", "a las 3 de la tarde" → time="15:00", "a las 8am" → time="08:00".
-  Ejemplos:
-    "recuérdame tomar la medicina a las 8pm" → action=set, message="tomar la medicina", time="20:00"
-    "qué recordatorios tengo" → action=list
-    "cancela el recordatorio abc123" → action=cancel, id="abc123"
 
 REGLAS IMPORTANTES:
 - Usa una herramienta SOLO si el usuario pide una acción concreta.
@@ -97,14 +90,6 @@ TOOL_CONFIRMATIONS = {
     "controlar_clima": lambda p: "Ajustando el clima",
     "ejecutar_escena": lambda p: "Activando la escena",
     "consultar_estado_hogar": lambda p: "Consultando el dispositivo",
-    # ── NUEVO ────────────────────────────────────────────────────
-    "reminder": lambda p: (
-        f"Guardando recordatorio para las {p.get('time', '...')}"
-        if p.get("action") == "set"
-        else "Consultando recordatorios"
-        if p.get("action") == "list"
-        else "Cancelando recordatorio"
-    ),
 }
 
 
@@ -180,6 +165,7 @@ def _toggle_pause(voice) -> None:
         paused = tts.toggle_pause()
         print("Jarvis: Voz pausada." if paused else "Jarvis: Voz reanudada.")
     else:
+        # Fallback: si el TTS no tiene toggle_pause, al menos detiene el hilo
         print("Jarvis: Pausa no soportada en este modo de voz.")
 
 
@@ -187,6 +173,7 @@ def read_user_input(voice) -> tuple[str, str]:
     print("Tu (Enter=teclado | 'm'=microfono | 'p'=pausar/reanudar): ", end="", flush=True)
     raw = input().strip()
 
+    # ── Pausa / reanuda con 'p' ───────────────────────────────
     if raw.lower() == "p":
         if voice:
             _toggle_pause(voice)
@@ -194,6 +181,7 @@ def read_user_input(voice) -> tuple[str, str]:
             print("Jarvis: Voz no disponible.")
         return "", "text"
 
+    # ── Entrada por micrófono con 'm' ─────────────────────────
     if raw.lower() == "m":
         if not voice or not voice.stt_available:
             print("Jarvis: El microfono no esta disponible.")
@@ -225,11 +213,6 @@ def main() -> None:
         return
 
     voice = build_voice()
-
-    # ── NUEVO: arrancar scheduler de recordatorios ───────────────
-    container.start_scheduler(voice)
-    # ────────────────────────────────────────────────────────────
-
     print(f"Tools registradas: {len(registry.get_all())}\n")
     print("Comandos: m=microfono | p=pausar/reanudar voz | voz on/off | salir\n")
 
@@ -266,44 +249,59 @@ def main() -> None:
 
         if txt_low in ["hora de trabajar", "modo trabajo"]:
             import subprocess
+
             apps = [
                 r"C:\Users\qandr\AppData\Local\Programs\Microsoft VS Code\Code.exe",
                 r"C:\Program Files\Google\Chrome\Application\chrome.exe",
                 "spotify"
             ]
+
             for app in apps:
                 try:
                     subprocess.Popen(app, shell=True)
                 except Exception as e:
                     print(f"Error abriendo {app}: {e}")
+
             resp = "Iniciando modo trabajo."
             print(f"Jarvis: {resp}")
+
             if voice:
                 voice.speak_async(resp)
+
             continue
 
         if txt_low in ["abre whatsapp", "abrir whatsapp"]:
             import subprocess
+
             subprocess.Popen(
                 ["explorer.exe", "shell:AppsFolder\5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App"]
             )
+
             resp = "Abriendo WhatsApp."
             print(f"Jarvis: {resp}")
+
             if voice:
                 voice.speak_async(resp)
+
             continue
 
         if txt_low in ["abre chrome", "abrir chrome"]:
             import subprocess
+
             subprocess.Popen(
                 r"C:\Program Files\Google\Chrome\Application\chrome.exe",
                 shell=True
             )
+
             resp = "Abriendo Chrome."
             print(f"Jarvis: {resp}")
+
             if voice:
                 voice.speak_async(resp)
+
             continue
+
+
 
         if txt_low == "abre documentos":
             import os
@@ -325,6 +323,7 @@ def main() -> None:
             os.startfile(r"C:\Users\qandr\OneDrive\Desktop\JARVIS")
             continue
 
+
         if txt_low == "abre facebook":
             import webbrowser
             webbrowser.open("https://facebook.com")
@@ -345,16 +344,87 @@ def main() -> None:
             webbrowser.open("https://instagram.com")
             continue
 
-        if txt_low.startswith("busca ") or txt_low.startswith("buscar "):
+        if txt_low.startswith("busca "):
             import webbrowser
             import urllib.parse
-            query = user_input[6:].strip() if txt_low.startswith("busca ") else user_input[7:].strip()
-            webbrowser.open("https://www.google.com/search?q=" + urllib.parse.quote(query))
+
+            query = user_input[6:].strip()
+
+            url = "https://www.google.com/search?q=" + urllib.parse.quote(query)
+
+            webbrowser.open(url)
+
             resp = f"Buscando {query}"
             print(f"Jarvis: {resp}")
+
             if voice:
                 voice.speak_async(resp)
+
             continue
+
+        if txt_low.startswith("buscar "):
+            import webbrowser
+            import urllib.parse
+
+            query = user_input[7:].strip()
+
+            url = "https://www.google.com/search?q=" + urllib.parse.quote(query)
+
+            webbrowser.open(url)
+
+            resp = f"Buscando {query}"
+            print(f"Jarvis: {resp}")
+
+            if voice:
+                voice.speak_async(resp)
+
+            continue
+
+
+
+        if txt_low.startswith("busca "):
+            import webbrowser
+            import urllib.parse
+
+            query = user_input[6:].strip()
+
+            webbrowser.open(
+                "https://www.google.com/search?q=" +
+                urllib.parse.quote(query)
+            )
+
+            resp = f"Buscando {query}"
+
+            print(f"Jarvis: {resp}")
+
+            if voice:
+                voice.speak_async(resp)
+
+            continue
+
+        if txt_low.startswith("buscar "):
+            import webbrowser
+            import urllib.parse
+
+            query = user_input[7:].strip()
+
+            webbrowser.open(
+                "https://www.google.com/search?q=" +
+                urllib.parse.quote(query)
+            )
+
+            resp = f"Buscando {query}"
+
+            print(f"Jarvis: {resp}")
+
+            if voice:
+                voice.speak_async(resp)
+
+            continue
+
+
+
+        # Plataformas de streaming -> PC por defecto
 
         if txt_low == "abre disney":
             import webbrowser
@@ -371,66 +441,145 @@ def main() -> None:
             webbrowser.open("https://www.primevideo.com")
             continue
 
+        if txt_low == "abre youtube":
+            import webbrowser
+            webbrowser.open("https://www.youtube.com")
+            continue
+
+        # Solo TV si se especifica expl?citamente
+
         if "en el televisor" in txt_low or "en la tv" in txt_low:
             print("Jarvis: Ejecutando comando para el televisor")
+            # aqu? ir? Home Assistant
             continue
+
+
 
         if txt_low.startswith("youtube "):
             import webbrowser
             import urllib.parse
+
             query = user_input[8:].strip()
+
             webbrowser.open(
-                "https://www.youtube.com/results?search_query=" + urllib.parse.quote(query)
+                "https://www.youtube.com/results?search_query="
+                + urllib.parse.quote(query)
             )
+
             continue
+
+
 
         if txt_low == "apaga el computador":
             import os
+
             os.system("shutdown /s /t 30")
-            resp = "El computador se apagará en 30 segundos"
+
+            resp = "El computador se apagar? en 30 segundos"
+
             print(f"Jarvis: {resp}")
+
             if voice:
                 voice.speak_async(resp)
+
             continue
+
+
+
+        if txt_low == "abre documentos":
+            import os
+            os.startfile(r"C:\Users\qandr\Documents")
+            continue
+
+        if txt_low == "abre descargas":
+            import os
+            os.startfile(r"C:\Users\qandr\Downloads")
+            continue
+
+        if txt_low == "abre escritorio":
+            import os
+            os.startfile(r"C:\Users\qandr\Desktop")
+            continue
+
+
 
         if txt_low == "cancelar apagado":
             import os
+
             os.system("shutdown /a")
+
             resp = "Apagado cancelado"
+
             print(f"Jarvis: {resp}")
+
             if voice:
                 voice.speak_async(resp)
+
             continue
+
+
 
         if txt_low == "bloquea el computador":
             import os
+
             os.system("rundll32.exe user32.dll,LockWorkStation")
+
             continue
+
+
 
         if txt_low == "reinicia el computador":
             import os
+
             os.system("shutdown /r /t 30")
-            resp = "El computador se reiniciará en 30 segundos"
+
+            resp = "El computador se reiniciar? en 30 segundos"
+
             print(f"Jarvis: {resp}")
+
             if voice:
                 voice.speak_async(resp)
+
             continue
+
+
 
         if txt_low == "suspende el computador":
             import os
+
             os.system("rundll32.exe powrprof.dll,SetSuspendState 0,1,0")
+
             continue
+
+
+
+        if txt_low == "bloquea el computador":
+            import os
+
+            os.system("rundll32.exe user32.dll,LockWorkStation")
+
+            continue
+
+
 
         if txt_low.startswith("crea carpeta "):
             from pathlib import Path
+
             nombre = user_input[13:].strip()
+
             ruta = Path.home() / "Desktop" / nombre
+
             ruta.mkdir(parents=True, exist_ok=True)
+
             resp = f"Carpeta creada: {nombre}"
+
             print(f"Jarvis: {resp}")
+
             if voice:
                 voice.speak_async(resp)
+
             continue
+
 
         event_name = events.USER_VOICE_INPUT if input_source == "voice" else events.USER_MESSAGE
         bus.publish(Event(name=event_name, payload={"text": user_input}, source="cli"))
