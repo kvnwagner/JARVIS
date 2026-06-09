@@ -103,6 +103,40 @@ def get_confirmation(tool_name: str, params: dict) -> str:
 def build_llm(container: Container):
     provider = container.config.llm_provider.lower().strip()
     model = container.config.llm_model
+    cerebras_key = container.config.cerebras_api_key or os.getenv("CEREBRAS_API_KEY", "")
+
+    # ── Orden de fallback: gpt-oss-120b → llama-3.1-8b → groq ──
+    CEREBRAS_FALLBACK_CHAIN = [
+        "gpt-oss-120b",
+        "llama3.1-8b",
+    ]
+    GROQ_FALLBACK_MODEL = "llama-3.3-70b-versatile"
+
+    if provider == "cerebras":
+        if not cerebras_key:
+            print("ERROR: Falta CEREBRAS_API_KEY en el archivo .env")
+            return None
+
+        for cerebras_model in CEREBRAS_FALLBACK_CHAIN:
+            try:
+                print(f"LLM: Intentando Cerebras ({cerebras_model})...")
+                llm = CerebrasProvider(api_key=cerebras_key, model=cerebras_model)
+                from core.interfaces import LLMMessage
+                test = llm.chat([LLMMessage(role="user", content="hi")])
+                if test.error is None:
+                    print(f"LLM: ✓ Cerebras ({cerebras_model}) activo")
+                    return llm
+                print(f"LLM: ✗ Cerebras ({cerebras_model}) falló — {test.error}")
+            except Exception as e:
+                print(f"LLM: ✗ Cerebras ({cerebras_model}) excepción — {e}")
+
+        groq_key = container.config.groq_api_key or os.getenv("GROQ_API_KEY", "")
+        if groq_key:
+            print(f"LLM: ⚠ Cerebras agotado, usando Groq ({GROQ_FALLBACK_MODEL})")
+            return GroqProvider(api_key=groq_key, model=GROQ_FALLBACK_MODEL)
+
+        print("LLM: ERROR — Cerebras falló y no hay GROQ_API_KEY de respaldo")
+        return None
 
     if provider == "groq":
         groq_key = container.config.groq_api_key or os.getenv("GROQ_API_KEY", "")
@@ -111,14 +145,6 @@ def build_llm(container: Container):
             return None
         print(f"LLM: Groq ({model})")
         return GroqProvider(api_key=groq_key, model=model)
-
-    if provider == "cerebras":
-        cerebras_key = container.config.cerebras_api_key or os.getenv("CEREBRAS_API_KEY", "")
-        if not cerebras_key:
-            print("ERROR: Falta CEREBRAS_API_KEY en el archivo .env")
-            return None
-        print(f"LLM: Cerebras ({model})")
-        return CerebrasProvider(api_key=cerebras_key)
 
     print(f"ERROR: LLM_PROVIDER no soportado en main.py: {provider}")
     print("Usa LLM_PROVIDER=groq o LLM_PROVIDER=cerebras")
@@ -165,7 +191,6 @@ def _toggle_pause(voice) -> None:
         paused = tts.toggle_pause()
         print("Jarvis: Voz pausada." if paused else "Jarvis: Voz reanudada.")
     else:
-        # Fallback: si el TTS no tiene toggle_pause, al menos detiene el hilo
         print("Jarvis: Pausa no soportada en este modo de voz.")
 
 
@@ -173,7 +198,6 @@ def read_user_input(voice) -> tuple[str, str]:
     print("Tu (Enter=teclado | 'm'=microfono | 'p'=pausar/reanudar): ", end="", flush=True)
     raw = input().strip()
 
-    # ── Pausa / reanuda con 'p' ───────────────────────────────
     if raw.lower() == "p":
         if voice:
             _toggle_pause(voice)
@@ -181,7 +205,6 @@ def read_user_input(voice) -> tuple[str, str]:
             print("Jarvis: Voz no disponible.")
         return "", "text"
 
-    # ── Entrada por micrófono con 'm' ─────────────────────────
     if raw.lower() == "m":
         if not voice or not voice.stt_available:
             print("Jarvis: El microfono no esta disponible.")
@@ -274,7 +297,7 @@ def main() -> None:
             import subprocess
 
             subprocess.Popen(
-                ["explorer.exe", "shell:AppsFolder\5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App"]
+                ["explorer.exe", r"shell:AppsFolder\5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App"]
             )
 
             resp = "Abriendo WhatsApp."
@@ -301,8 +324,6 @@ def main() -> None:
 
             continue
 
-
-
         if txt_low == "abre documentos":
             import os
             os.startfile(r"C:\Users\qandr\Documents")
@@ -322,7 +343,6 @@ def main() -> None:
             import os
             os.startfile(r"C:\Users\qandr\OneDrive\Desktop\JARVIS")
             continue
-
 
         if txt_low == "abre facebook":
             import webbrowser
@@ -349,9 +369,7 @@ def main() -> None:
             import urllib.parse
 
             query = user_input[6:].strip()
-
             url = "https://www.google.com/search?q=" + urllib.parse.quote(query)
-
             webbrowser.open(url)
 
             resp = f"Buscando {query}"
@@ -367,9 +385,7 @@ def main() -> None:
             import urllib.parse
 
             query = user_input[7:].strip()
-
             url = "https://www.google.com/search?q=" + urllib.parse.quote(query)
-
             webbrowser.open(url)
 
             resp = f"Buscando {query}"
@@ -379,50 +395,6 @@ def main() -> None:
                 voice.speak_async(resp)
 
             continue
-
-
-
-        if txt_low.startswith("busca "):
-            import webbrowser
-            import urllib.parse
-
-            query = user_input[6:].strip()
-
-            webbrowser.open(
-                "https://www.google.com/search?q=" +
-                urllib.parse.quote(query)
-            )
-
-            resp = f"Buscando {query}"
-
-            print(f"Jarvis: {resp}")
-
-            if voice:
-                voice.speak_async(resp)
-
-            continue
-
-        if txt_low.startswith("buscar "):
-            import webbrowser
-            import urllib.parse
-
-            query = user_input[7:].strip()
-
-            webbrowser.open(
-                "https://www.google.com/search?q=" +
-                urllib.parse.quote(query)
-            )
-
-            resp = f"Buscando {query}"
-
-            print(f"Jarvis: {resp}")
-
-            if voice:
-                voice.speak_async(resp)
-
-            continue
-
-
 
         # Plataformas de streaming -> PC por defecto
 
@@ -441,75 +413,40 @@ def main() -> None:
             webbrowser.open("https://www.primevideo.com")
             continue
 
-        if txt_low == "abre youtube":
-            import webbrowser
-            webbrowser.open("https://www.youtube.com")
-            continue
-
-        # Solo TV si se especifica expl?citamente
+        # Solo TV si se especifica explicitamente
 
         if "en el televisor" in txt_low or "en la tv" in txt_low:
             print("Jarvis: Ejecutando comando para el televisor")
-            # aqu? ir? Home Assistant
             continue
-
-
 
         if txt_low.startswith("youtube "):
             import webbrowser
             import urllib.parse
 
             query = user_input[8:].strip()
-
             webbrowser.open(
                 "https://www.youtube.com/results?search_query="
                 + urllib.parse.quote(query)
             )
-
             continue
-
-
 
         if txt_low == "apaga el computador":
             import os
-
             os.system("shutdown /s /t 30")
 
-            resp = "El computador se apagar? en 30 segundos"
-
+            resp = "El computador se apagará en 30 segundos"
             print(f"Jarvis: {resp}")
 
             if voice:
                 voice.speak_async(resp)
 
             continue
-
-
-
-        if txt_low == "abre documentos":
-            import os
-            os.startfile(r"C:\Users\qandr\Documents")
-            continue
-
-        if txt_low == "abre descargas":
-            import os
-            os.startfile(r"C:\Users\qandr\Downloads")
-            continue
-
-        if txt_low == "abre escritorio":
-            import os
-            os.startfile(r"C:\Users\qandr\Desktop")
-            continue
-
-
 
         if txt_low == "cancelar apagado":
             import os
-
             os.system("shutdown /a")
 
             resp = "Apagado cancelado"
-
             print(f"Jarvis: {resp}")
 
             if voice:
@@ -517,24 +454,16 @@ def main() -> None:
 
             continue
 
-
-
         if txt_low == "bloquea el computador":
             import os
-
             os.system("rundll32.exe user32.dll,LockWorkStation")
-
             continue
-
-
 
         if txt_low == "reinicia el computador":
             import os
-
             os.system("shutdown /r /t 30")
 
-            resp = "El computador se reiniciar? en 30 segundos"
-
+            resp = "El computador se reiniciará en 30 segundos"
             print(f"Jarvis: {resp}")
 
             if voice:
@@ -542,37 +471,19 @@ def main() -> None:
 
             continue
 
-
-
         if txt_low == "suspende el computador":
             import os
-
             os.system("rundll32.exe powrprof.dll,SetSuspendState 0,1,0")
-
             continue
-
-
-
-        if txt_low == "bloquea el computador":
-            import os
-
-            os.system("rundll32.exe user32.dll,LockWorkStation")
-
-            continue
-
-
 
         if txt_low.startswith("crea carpeta "):
             from pathlib import Path
 
             nombre = user_input[13:].strip()
-
             ruta = Path.home() / "Desktop" / nombre
-
             ruta.mkdir(parents=True, exist_ok=True)
 
             resp = f"Carpeta creada: {nombre}"
-
             print(f"Jarvis: {resp}")
 
             if voice:
@@ -580,6 +491,7 @@ def main() -> None:
 
             continue
 
+        # ── LLM ──────────────────────────────────────────────────────────
 
         event_name = events.USER_VOICE_INPUT if input_source == "voice" else events.USER_MESSAGE
         bus.publish(Event(name=event_name, payload={"text": user_input}, source="cli"))
@@ -603,8 +515,8 @@ def main() -> None:
                 voice.speak_async(confirmation)
 
             print(f"Tool elegida: {tool_name}({params})")
-            bus.publish(Event(name=events.LLM_TOOL_CALL, payload=response.tool_call, source="llm"))
             result = registry.execute(tool_name, params)
+            bus.publish(Event(name=events.LLM_TOOL_CALL, payload=response.tool_call, source="llm"))
             tool_output = result.output if result.success else f"Error: {result.error}"
 
             interpretation_messages = [
