@@ -14,6 +14,8 @@ import {
   Send,
   Sparkles,
   Trash2,
+  Volume2,
+  VolumeX,
   Wifi,
   WifiOff,
 } from "lucide-vue-next";
@@ -38,6 +40,8 @@ const micState = ref("idle");
 const micError = ref("");
 const panel = ref("chat");
 const chatScroll = ref(null);
+const reminderPollInterval = ref(null);
+const voiceEnabled = ref(true);
 
 const canSend = computed(() => input.value.trim().length > 0 && !sending.value);
 const connectionLabel = computed(() => {
@@ -58,11 +62,17 @@ onMounted(async () => {
   setupSpeechRecognition();
   await refreshBackendState();
   connectWebSocket();
+  startReminderPolling();
+  // Saludo inicial
+  setTimeout(() => {
+    speakText("Hola señor, ¿cómo está? Estoy listo para ayudarlo el día de hoy.");
+  }, 1500);
 });
 
 onBeforeUnmount(() => {
   ws.value?.close();
   recognition.value?.abort?.();
+  if (reminderPollInterval.value) clearInterval(reminderPollInterval.value);
 });
 
 watch(messages, () => {
@@ -212,6 +222,7 @@ function finalizeStreamingMessage(content, toolUsed = null, toolSuccess = null, 
   } else {
     pushMessage("assistant", content, { toolUsed, toolSuccess, toolOutput });
   }
+  speakText(content);
   sending.value = false;
   typing.value = false;
   streamId.value = null;
@@ -266,6 +277,26 @@ async function animateRestResponse(text, toolUsed, toolSuccess = null, toolOutpu
   finalizeStreamingMessage(text, toolUsed, toolSuccess, toolOutput);
 }
 
+function startReminderPolling() {
+  const poll = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/reminders/alerts`);
+      const data = await res.json();
+      (data.alerts || []).forEach((alert) => {
+        const msg = `🔔 Recordatorio: ${alert.message}`;
+        pushMessage("assistant", msg, {
+          toolUsed: "reminder",
+          toolSuccess: true,
+          toolOutput: msg,
+        });
+        speakText(`Recordatorio: ${alert.message}`);
+      });
+    } catch (_) {}
+  };
+  poll(); // consulta inmediata al cargar
+  reminderPollInterval.value = setInterval(poll, 20000); // cada 20 segundos
+}
+
 function setupSpeechRecognition() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
@@ -293,7 +324,22 @@ function setupSpeechRecognition() {
     micError.value = event.error || "No se pudo acceder al microfono.";
   };
   rec.onend = () => {
-    if (micState.value === "listening") micState.value = "idle";
+    if (micState.value === "listening") {
+      micState.value = "idle";
+      const text = input.value.trim().toLowerCase();
+      // Wake word: debe comenzar con "jarvis"
+      if (text.startsWith("jarvis")) {
+        // Quitar la wake word y enviar automáticamente
+        input.value = input.value.trim().replace(/^jarvis[,\s]*/i, "").trim();
+        if (input.value) {
+          sendMessage();
+        }
+      } else if (text) {
+        // Si habló pero sin wake word, limpiar y avisar
+        input.value = "";
+        speakText("Por favor, comience su solicitud diciendo Jarvis.");
+      }
+    }
   };
 
   recognition.value = rec;
@@ -307,6 +353,24 @@ function toggleMic() {
     return;
   }
   recognition.value.start();
+}
+
+async function speakText(text) {
+  if (!voiceEnabled.value || !text || !text.trim()) return;
+  try {
+    await fetch(`${API_BASE}/tts/speak`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+  } catch (_) {}
+}
+
+function toggleVoice() {
+  voiceEnabled.value = !voiceEnabled.value;
+  if (!voiceEnabled.value) {
+    fetch(`${API_BASE}/tts/stop`, { method: "POST" }).catch(() => {});
+  }
 }
 
 function clearHistory() {
@@ -399,6 +463,10 @@ function formatTime(value) {
           </button>
           <button class="icon-button" @click="connectWebSocket" title="Reconectar WebSocket">
             <PlugZap :size="18" />
+          </button>
+          <button class="icon-button" @click="toggleVoice" :title="voiceEnabled ? 'Silenciar voz' : 'Activar voz'">
+            <Volume2 v-if="voiceEnabled" :size="18" />
+            <VolumeX v-else :size="18" />
           </button>
           <button class="icon-button danger" @click="clearHistory" title="Limpiar historial">
             <Trash2 :size="18" />

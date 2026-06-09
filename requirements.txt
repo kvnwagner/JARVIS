@@ -51,3 +51,12 @@ edge-tts
 
 # Spotify
 spotipy==2.25.2
+
+# Google Tasks API
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+google-api-python-client
+
+# gkeepapi (reservado para migración futura)
+# gkeepapi
