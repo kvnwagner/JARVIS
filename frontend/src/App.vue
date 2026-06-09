@@ -14,11 +14,8 @@ import {
   Send,
   Sparkles,
   Trash2,
-<<<<<<< HEAD
-=======
   Volume2,
   VolumeX,
->>>>>>> origin/main
   Wifi,
   WifiOff,
 } from "lucide-vue-next";
@@ -43,11 +40,8 @@ const micState = ref("idle");
 const micError = ref("");
 const panel = ref("chat");
 const chatScroll = ref(null);
-<<<<<<< HEAD
-=======
 const reminderPollInterval = ref(null);
 const voiceEnabled = ref(true);
->>>>>>> origin/main
 
 const canSend = computed(() => input.value.trim().length > 0 && !sending.value);
 const connectionLabel = computed(() => {
@@ -68,23 +62,16 @@ onMounted(async () => {
   setupSpeechRecognition();
   await refreshBackendState();
   connectWebSocket();
-<<<<<<< HEAD
-=======
   startReminderPolling();
-  // Saludo inicial
   setTimeout(() => {
     speakText("Hola señor, ¿cómo está? Estoy listo para ayudarlo el día de hoy.");
   }, 1500);
->>>>>>> origin/main
 });
 
 onBeforeUnmount(() => {
   ws.value?.close();
   recognition.value?.abort?.();
-<<<<<<< HEAD
-=======
   if (reminderPollInterval.value) clearInterval(reminderPollInterval.value);
->>>>>>> origin/main
 });
 
 watch(messages, () => {
@@ -234,10 +221,7 @@ function finalizeStreamingMessage(content, toolUsed = null, toolSuccess = null, 
   } else {
     pushMessage("assistant", content, { toolUsed, toolSuccess, toolOutput });
   }
-<<<<<<< HEAD
-=======
   speakText(content);
->>>>>>> origin/main
   sending.value = false;
   typing.value = false;
   streamId.value = null;
@@ -292,8 +276,6 @@ async function animateRestResponse(text, toolUsed, toolSuccess = null, toolOutpu
   finalizeStreamingMessage(text, toolUsed, toolSuccess, toolOutput);
 }
 
-<<<<<<< HEAD
-=======
 function startReminderPolling() {
   const poll = async () => {
     try {
@@ -310,11 +292,10 @@ function startReminderPolling() {
       });
     } catch (_) {}
   };
-  poll(); // consulta inmediata al cargar
-  reminderPollInterval.value = setInterval(poll, 20000); // cada 20 segundos
+  poll();
+  reminderPollInterval.value = setInterval(poll, 20000);
 }
 
->>>>>>> origin/main
 function setupSpeechRecognition() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
@@ -342,26 +323,19 @@ function setupSpeechRecognition() {
     micError.value = event.error || "No se pudo acceder al microfono.";
   };
   rec.onend = () => {
-<<<<<<< HEAD
-    if (micState.value === "listening") micState.value = "idle";
-=======
     if (micState.value === "listening") {
       micState.value = "idle";
       const text = input.value.trim().toLowerCase();
-      // Wake word: debe comenzar con "jarvis"
       if (text.startsWith("jarvis")) {
-        // Quitar la wake word y enviar automáticamente
         input.value = input.value.trim().replace(/^jarvis[,\s]*/i, "").trim();
         if (input.value) {
           sendMessage();
         }
       } else if (text) {
-        // Si habló pero sin wake word, limpiar y avisar
         input.value = "";
         speakText("Por favor, comience su solicitud diciendo Jarvis.");
       }
     }
->>>>>>> origin/main
   };
 
   recognition.value = rec;
@@ -377,8 +351,6 @@ function toggleMic() {
   recognition.value.start();
 }
 
-<<<<<<< HEAD
-=======
 async function speakText(text) {
   if (!voiceEnabled.value || !text || !text.trim()) return;
   try {
@@ -397,7 +369,6 @@ function toggleVoice() {
   }
 }
 
->>>>>>> origin/main
 function clearHistory() {
   messages.value = [welcomeMessage()];
 }
@@ -489,13 +460,10 @@ function formatTime(value) {
           <button class="icon-button" @click="connectWebSocket" title="Reconectar WebSocket">
             <PlugZap :size="18" />
           </button>
-<<<<<<< HEAD
-=======
           <button class="icon-button" @click="toggleVoice" :title="voiceEnabled ? 'Silenciar voz' : 'Activar voz'">
             <Volume2 v-if="voiceEnabled" :size="18" />
             <VolumeX v-else :size="18" />
           </button>
->>>>>>> origin/main
           <button class="icon-button danger" @click="clearHistory" title="Limpiar historial">
             <Trash2 :size="18" />
           </button>
