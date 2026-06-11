@@ -1,6 +1,7 @@
 """
 Tool: open_app
 Abre una aplicación en Windows por nombre o un sitio web en el navegador.
+Usa rutas dinámicas — funciona en cualquier computador sin modificar nada.
 """
 
 import os
@@ -9,21 +10,33 @@ import shutil
 import webbrowser
 from core.interfaces import Tool, ToolResult
 
+# Variables de entorno del sistema (dinámicas por usuario)
+APPDATA      = os.environ.get("APPDATA", "")
+LOCALAPPDATA = os.environ.get("LOCALAPPDATA", "")
+PROGRAMFILES = os.environ.get("ProgramFiles", r"C:\Program Files")
+PROGRAMFILESx86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+
 # Mapa de nombres amigables → ejecutables o URLs
 APP_ALIASES: dict[str, str] = {
-    # Aplicaciones
-    "spotify":            r"C:\Users\Wagne\AppData\Roaming\Spotify\Spotify.exe",
-    "chrome":             r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-    "google chrome":      r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-    "vscode":             r"C:\Users\Wagne\AppData\Local\Programs\Microsoft VS Code\Code.exe",
-    "visual studio code": r"C:\Users\Wagne\AppData\Local\Programs\Microsoft VS Code\Code.exe",
+    # Aplicaciones — rutas dinámicas
+    "spotify":            os.path.join(APPDATA, r"Spotify\Spotify.exe"),
+    "vscode":             os.path.join(LOCALAPPDATA, r"Programs\Microsoft VS Code\Code.exe"),
+    "visual studio code": os.path.join(LOCALAPPDATA, r"Programs\Microsoft VS Code\Code.exe"),
+    "chrome":             os.path.join(PROGRAMFILES, r"Google\Chrome\Application\chrome.exe"),
+    "google chrome":      os.path.join(PROGRAMFILES, r"Google\Chrome\Application\chrome.exe"),
+    "discord":            os.path.join(LOCALAPPDATA, r"Discord\Update.exe"),
+    "telegram":           os.path.join(APPDATA, r"Telegram Desktop\Telegram.exe"),
+    "steam":              os.path.join(PROGRAMFILES, r"Steam\steam.exe"),
     "whatsapp":           "shell:AppsFolder\\5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App",
-    "discord":            "discord",
-    "telegram":           "telegram",
-    "steam":              "steam",
+
+    # Herramientas del sistema (en PATH, sin ruta absoluta)
     "notepad":            "notepad",
     "explorer":           "explorer",
     "calculadora":        "calc",
+    "cmd":                "cmd",
+    "powershell":         "powershell",
+    "taskmgr":            "taskmgr",
+    "paint":              "mspaint",
 
     # Sitios web
     "youtube":            "https://www.youtube.com",
@@ -41,6 +54,8 @@ APP_ALIASES: dict[str, str] = {
     "google":             "https://www.google.com",
     "github":             "https://www.github.com",
     "linkedin":           "https://www.linkedin.com",
+    "chatgpt":            "https://www.chatgpt.com",
+    "claude":             "https://www.claude.ai",
 }
 
 
@@ -49,7 +64,8 @@ class OpenAppTool(Tool):
     description = (
         "Abre una aplicación de Windows o un sitio web en el navegador. "
         "Usa esto cuando el usuario pida abrir, lanzar o iniciar cualquier programa, "
-        "aplicación o sitio web como YouTube, Facebook, Instagram, Netflix, Gmail, etc."
+        "aplicación o sitio web como YouTube, Facebook, Instagram, Netflix, Gmail, "
+        "Spotify, Chrome, VSCode, Discord, Steam, etc."
     )
     parameters_schema = {
         "type": "object",
@@ -58,7 +74,7 @@ class OpenAppTool(Tool):
                 "type": "string",
                 "description": (
                     "Nombre de la aplicación o sitio web a abrir. "
-                    "Ejemplos: spotify, chrome, youtube, facebook, instagram, netflix, gmail"
+                    "Ejemplos: spotify, chrome, youtube, facebook, instagram, netflix, gmail, discord"
                 )
             }
         },
@@ -73,7 +89,7 @@ class OpenAppTool(Tool):
         # Resolver alias
         executable = APP_ALIASES.get(app_name, app_name)
 
-        # Si es una URL, abrir en el navegador
+        # ── URL → abrir en navegador ──────────────────────────────────────────
         if executable.startswith("https://") or executable.startswith("http://"):
             try:
                 webbrowser.open(executable)
@@ -81,7 +97,7 @@ class OpenAppTool(Tool):
             except Exception as e:
                 return ToolResult.fail(f"Error al abrir {app_name}: {e}")
 
-        # WhatsApp app de escritorio
+        # ── WhatsApp (UWP) ───────────────────────────────────────────────────
         if app_name == "whatsapp":
             try:
                 subprocess.Popen(
@@ -91,7 +107,7 @@ class OpenAppTool(Tool):
             except Exception as e:
                 return ToolResult.fail(f"Error al abrir WhatsApp: {e}")
 
-        # Shell apps
+        # ── Shell apps genéricas ─────────────────────────────────────────────
         if executable.startswith("shell:AppsFolder"):
             try:
                 subprocess.Popen(
@@ -103,13 +119,32 @@ class OpenAppTool(Tool):
             except Exception as e:
                 return ToolResult.fail(f"Error al abrir '{app_name}': {e}")
 
-        # Verificar si el ejecutable existe en PATH o es ruta absoluta
-        if not os.path.isfile(executable) and not shutil.which(executable):
-            return ToolResult.fail(
-                f"No se encontró '{app_name}' en el sistema. "
-                f"Verifica que esté instalada y en el PATH."
-            )
+        # ── Discord: usa el updater con --processStart ───────────────────────
+        if app_name == "discord":
+            discord_path = os.path.join(LOCALAPPDATA, r"Discord\Update.exe")
+            if os.path.isfile(discord_path):
+                try:
+                    subprocess.Popen(
+                        [discord_path, "--processStart", "Discord.exe"],
+                        creationflags=subprocess.DETACHED_PROCESS
+                    )
+                    return ToolResult.ok("Discord abierto correctamente.")
+                except Exception as e:
+                    return ToolResult.fail(f"Error al abrir Discord: {e}")
 
+        # ── Verificar que el ejecutable existe (ruta absoluta o PATH) ────────
+        if not os.path.isfile(executable) and not shutil.which(executable):
+            # Último intento: buscar en PATH por si el usuario tiene la app instalada
+            in_path = shutil.which(app_name)
+            if in_path:
+                executable = in_path
+            else:
+                return ToolResult.fail(
+                    f"No se encontró '{app_name}' en el sistema. "
+                    f"Verifica que esté instalada o agrégala al PATH."
+                )
+
+        # ── Lanzar ejecutable ────────────────────────────────────────────────
         try:
             subprocess.Popen(
                 executable,
