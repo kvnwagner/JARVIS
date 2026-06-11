@@ -289,21 +289,48 @@ def _clean_for_tts(text: str) -> str:
     return text
 
 
+def _find_ffplay() -> str | None:
+    """Busca ffplay en PATH o en la ruta típica de WinGet, sin importar el usuario."""
+    import shutil, glob
+    # 1. Intentar desde PATH (si el sistema lo tiene registrado)
+    in_path = shutil.which("ffplay")
+    if in_path:
+        return in_path
+    # 2. Buscar en la carpeta de WinGet del usuario actual
+    local = os.environ.get("LOCALAPPDATA", "")
+    pattern = os.path.join(
+        local,
+        "Microsoft", "WinGet", "Packages",
+        "Gyan.FFmpeg_*", "ffmpeg-*", "bin", "ffplay.exe"
+    )
+    matches = glob.glob(pattern)
+    if matches:
+        return matches[0]
+    return None
+
+
 @app.post("/tts/speak")
 async def tts_speak(req: TTSRequest):
-    """Sintetiza voz con edge-tts y reproduce con ffplay (instalado)."""
+    """Sintetiza voz con edge-tts y reproduce con ffplay (ruta dinámica)."""
     async def _speak():
         try:
             import edge_tts, tempfile
             clean_text = _clean_for_tts(req.text.strip())
             if not clean_text:
                 return
+
             tts = edge_tts.Communicate(clean_text, "es-ES-AlvaroNeural", rate="+15%")
             tmp = tempfile.mktemp(suffix=".mp3")
             await tts.save(tmp)
+
+            ffplay = _find_ffplay()
+            if not ffplay:
+                print("TTS error: ffplay no encontrado. Instala ffmpeg con: winget install Gyan.FFmpeg")
+                return
+
             import subprocess
             subprocess.Popen(
-                [r"C:\Users\Wagne\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.1.1-full_build\bin\ffplay.exe", "-nodisp", "-autoexit", "-loglevel", "quiet", tmp],
+                [ffplay, "-nodisp", "-autoexit", "-loglevel", "quiet", tmp],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             )
         except Exception as e:
