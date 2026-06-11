@@ -1,10 +1,44 @@
+# ── Python ───────────────────────────────────────────────────
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.pdb
+
+# ── Entorno virtual ──────────────────────────────────────────
+venv/
+.venv/
+env/
+
+# ── Variables de entorno y secretos ─────────────────────────
 .env
+*.env
+
+# ── Logs y capturas ──────────────────────────────────────────
 logs/
 screenshots/
 
+# ── Bases de datos ───────────────────────────────────────────
 jarvis_test.db
 jarvis.db
+*.db
+*.sqlite
+*.sqlite3
+
+# ── Cache de APIs (tokens sensibles) ─────────────────────────
+.spotify_cache
+.keep_cache
+token_tasks.json
+credentials.json
+
+# ── Frontend — Node ──────────────────────────────────────────
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/package-lock.json
+
+# ── IDEs ─────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.suo
+*.user
