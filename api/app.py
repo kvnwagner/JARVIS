@@ -80,12 +80,42 @@ def startup():
 
     try:
         provider = config.llm_provider.lower().strip()
-        if provider == "groq":
+
+        if provider == "cerebras":
+            # ── Cerebras con fallback automático a Groq ──────────────
+            # Si Cerebras falla (sin créditos = 402, rate limit = 429,
+            # o cualquier otro error), cae solo a Groq sin tocar el .env.
+            from llm import CerebrasProvider, GroqProvider
+
+            cerebras_key = config.cerebras_api_key
+            groq_key = config.groq_api_key or os.getenv("GROQ_API_KEY", "")
+
+            llm = None
+            if cerebras_key:
+                try:
+                    print("LLM: Intentando Cerebras...")
+                    candidate = CerebrasProvider(api_key=cerebras_key)
+                    test = candidate.chat([LLMMessage(role="user", content="hi")])
+                    if test.error is None:
+                        llm = candidate
+                        print("LLM: ✓ Cerebras activo")
+                    else:
+                        print(f"LLM: ✗ Cerebras falló — {test.error}")
+                except Exception as e:
+                    print(f"LLM: ✗ Cerebras excepción — {e}")
+            else:
+                print("LLM: no hay CEREBRAS_API_KEY configurada")
+
+            if llm is None and groq_key:
+                print("LLM: ⚠ usando Groq como respaldo")
+                llm = GroqProvider(api_key=groq_key, model="openai/gpt-oss-120b")
+
+            if llm is None:
+                print("LLM: ERROR — Cerebras falló y no hay GROQ_API_KEY de respaldo")
+
+        elif provider == "groq":
             from llm import GroqProvider
             llm = GroqProvider(api_key=config.groq_api_key, model=config.llm_model or "openai/gpt-oss-120b")
-        elif provider == "cerebras":
-            from llm import CerebrasProvider
-            llm = CerebrasProvider(api_key=config.cerebras_api_key)
         elif provider == "gemini":
             from llm import GeminiProvider
             llm = GeminiProvider(api_key=config.gemini_api_key, model=config.llm_model or "gemini-1.5-flash")
