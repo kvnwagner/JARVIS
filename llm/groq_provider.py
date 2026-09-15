@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import re
+import time
 import unicodedata
 from typing import Any
 
@@ -19,10 +21,12 @@ class GroqProvider(LLMProvider):
         api_key: str,
         model: str = "llama-3.1-8b-instant",
         timeout: int = 30,
+        max_retries: int = 3,
     ):
         self.api_key = api_key
         self.model_name = model
         self.timeout = timeout
+        self.max_retries = max_retries
         self.url = "https://api.groq.com/openai/v1/chat/completions"
 
     def chat(
@@ -32,32 +36,70 @@ class GroqProvider(LLMProvider):
     ) -> LLMResponse:
         payload = self._build_payload(messages, tools or [])
 
-        try:
-            response = requests.post(
-                self.url,
-                json=payload,
-                headers={
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {self.api_key}",
-                },
-                timeout=self.timeout,
-            )
-            data = response.json()
-
-            if response.status_code >= 400:
-                return LLMResponse(
-                    text=None,
-                    tool_call=None,
-                    raw=data,
-                    error=self._extract_api_error(data, response.status_code),
+        for attempt in range(self.max_retries + 1):
+            try:
+                response = requests.post(
+                    self.url,
+                    json=payload,
+                    headers={
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {self.api_key}",
+                    },
+                    timeout=self.timeout,
                 )
+                data = response.json()
 
-            return self._parse_response(data)
+                if response.status_code == 429 and attempt < self.max_retries:
+                    wait_s = self._extract_retry_wait(data, response.headers)
+                    time.sleep(wait_s)
+                    continue
 
-        except requests.RequestException as exc:
-            return LLMResponse(text=None, tool_call=None, error=f"Error de red: {exc}")
-        except ValueError as exc:
-            return LLMResponse(text=None, tool_call=None, error=f"Respuesta no JSON: {exc}")
+                if response.status_code >= 400:
+                    return LLMResponse(
+                        text=None,
+                        tool_call=None,
+                        raw=data,
+                        error=self._extract_api_error(data, response.status_code),
+                    )
+
+                return self._parse_response(data)
+
+            except requests.RequestException as exc:
+                if attempt < self.max_retries:
+                    time.sleep(1.5 * (attempt + 1))
+                    continue
+                return LLMResponse(text=None, tool_call=None, error=f"Error de red: {exc}")
+            except ValueError as exc:
+                return LLMResponse(text=None, tool_call=None, error=f"Respuesta no JSON: {exc}")
+
+        return LLMResponse(
+            text=None,
+            tool_call=None,
+            error="Groq API HTTP 429: límite de tokens por minuto agotado tras varios reintentos.",
+        )
+
+    def _extract_retry_wait(self, data: dict[str, Any], headers) -> float:
+        """
+        Calcula cuánto esperar antes de reintentar.
+        Prioridad: mensaje de error de Groq ('try again in 480ms') >
+        header Retry-After > valor por defecto (1.5s).
+        """
+        message = (data.get("error", {}) or {}).get("message", "")
+
+        match = re.search(r"try again in\s+([\d.]+)(ms|s)", message, re.IGNORECASE)
+        if match:
+            value, unit = match.groups()
+            wait = float(value) / 1000 if unit.lower() == "ms" else float(value)
+            return max(wait, 0.05) + 0.1  # pequeño margen de seguridad
+
+        retry_after = headers.get("Retry-After") if headers else None
+        if retry_after:
+            try:
+                return float(retry_after) + 0.1
+            except ValueError:
+                pass
+
+        return 1.5
 
     @staticmethod
     def _normalize(text: str) -> str:

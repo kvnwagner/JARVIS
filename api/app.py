@@ -1,5 +1,6 @@
 # ================================================================
-# api/app.py — Versión completa con WebSocket, TTS y Recordatorios
+# api/app.py — Versión completa con WebSocket, TTS, Recordatorios
+# e historial paginado desde SQLite
 # ================================================================
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
@@ -24,7 +25,7 @@ from tools.external.reminder_tool import init_reminders_table, get_pending_remin
 app = FastAPI(
     title="JARVIS API",
     description="API REST para el asistente Jarvis",
-    version="0.8.0"
+    version="0.9.0"
 )
 
 app.add_middleware(
@@ -46,40 +47,23 @@ messages_history: list[LLMMessage] = []
 # Lista de alertas pendientes para el frontend
 _pending_alerts: list[dict] = []
 
+# Prompt reducido a lo esencial — menos tokens por request, importante
+# para no chocar con los límites de tokens/minuto de Groq.
 SYSTEM_PROMPT = """
-Eres Jarvis, un asistente personal inteligente. Respondes en español, de forma clara, natural y amigable.
+Eres Jarvis, asistente personal en español, claro y natural. Interpreta la
+intención real del usuario aunque tenga errores ortográficos o jerga.
 
-INTERPRETACIÓN DE MENSAJES:
-- Interpreta SIEMPRE la intención real del usuario, aunque haya errores ortográficos o lenguaje informal.
-- Si el mensaje es ambiguo, elige la interpretación más lógica y actúa.
-- SIEMPRE usa herramientas cuando el usuario pida abrir algo, reproducir música, consultar clima, etc.
+Herramientas: weather, news, email, spotify (action=play+query),
+open_app (apps y sitios web: youtube/facebook/instagram/netflix/gmail/whatsapp),
+screenshot, reminder (action=set/list/cancel), system, translate (text+target),
+files (action=search/list/read, solo carpetas personales del usuario),
+browser_history (historial de Chrome/Edge, opcional query),
+controlar_luz, controlar_clima, controlar_tv, abrir_app_tv, buscar_youtube_tv,
+consultar_estado_hogar, ejecutar_escena.
 
-HERRAMIENTAS DISPONIBLES:
-- weather: clima de cualquier ciudad
-- news: noticias recientes
-- email: enviar correos
-- spotify: reproducir música (action=play, query=canción o artista)
-- open_app: abrir aplicaciones Windows Y sitios web. Usar para:
-  * Aplicaciones: spotify, chrome, discord, vscode, notepad, calculadora
-  * Sitios web: youtube → app=youtube, facebook → app=facebook, instagram → app=instagram, netflix → app=netflix, gmail → app=gmail, whatsapp → app=whatsapp
-- screenshot: captura de pantalla
-- reminder: crear recordatorios (action=set, message=..., time=HH:MM)
-- system: estado del sistema (CPU, RAM, disco, IP)
-- controlar_luz: encender/apagar luces del hogar
-- controlar_clima: controlar aire acondicionado
-- controlar_tv: controlar televisor (encender, apagar, volumen, pausa)
-- abrir_app_tv: abrir apps en el TV (netflix, youtube, spotify)
-- buscar_youtube_tv: reproducir algo en YouTube en el TV
-- consultar_estado_hogar: consultar estado de dispositivos del hogar
-- ejecutar_escena: activar escenas del hogar
-
-REGLAS IMPORTANTES:
-- SIEMPRE usa open_app cuando el usuario diga "abre", "abre YouTube", "abre Facebook", "abre Instagram", etc.
-- Para Spotify en el PC: usa spotify con action=play y query=nombre.
-- Para TV: usa controlar_tv, NUNCA open_app.
-- Para sitios web en el PC: usa open_app con el nombre del sitio como app.
-- Para conversación general sin acción concreta: responde con texto directamente.
-- NUNCA respondas solo con texto cuando el usuario pide abrir algo.
+Reglas: usa open_app para "abre X" (apps o webs, NUNCA para el TV). Usa
+controlar_tv para el televisor. Para Spotify usa action=play. Para
+conversación general sin acción concreta, responde solo con texto.
 """.strip()
 
 
@@ -98,7 +82,7 @@ def startup():
         provider = config.llm_provider.lower().strip()
         if provider == "groq":
             from llm import GroqProvider
-            llm = GroqProvider(api_key=config.groq_api_key, model=config.llm_model or "llama-3.3-70b-versatile")
+            llm = GroqProvider(api_key=config.groq_api_key, model=config.llm_model or "openai/gpt-oss-120b")
         elif provider == "cerebras":
             from llm import CerebrasProvider
             llm = CerebrasProvider(api_key=config.cerebras_api_key)
@@ -199,9 +183,11 @@ def _run_llm(user_message: str):
     memory.save_message(reply, source="assistant")
     bus.publish(Event(name=events.LLM_RESPONSE, payload={"text": reply}, source="api"))
 
-    # Limpiar historial si crece demasiado
-    if len(messages_history) > 20:
-        messages_history[:] = [messages_history[0]] + messages_history[-10:]
+    # Trim agresivo: system + últimos 6 mensajes.
+    # Antes se dejaba crecer hasta 20 (10 turnos) — eso multiplica los
+    # tokens por request y es lo que estaba disparando el rate-limit de Groq.
+    if len(messages_history) > 10:
+        messages_history[:] = [messages_history[0]] + messages_history[-6:]
 
     return reply, tool_used, tool_success, tool_output
 
@@ -253,9 +239,17 @@ def execute(req: ExecuteRequest):
 
 
 @app.get("/memory")
-def get_memory(n: int = 20):
+def get_memory(limit: int = 20, offset: int = 0):
+    """
+    Historial REAL y persistente (SQLite), paginado.
+    offset=0 devuelve los mensajes más recientes; sube offset para pedir
+    mensajes más antiguos ("cargar historial anterior" en el frontend).
+    """
     return {
-        "conversation": memory.get_conversation_context(n=n),
+        "conversation": memory.get_conversation_page(limit=limit, offset=offset),
+        "total": memory.get_conversation_total(),
+        "limit": limit,
+        "offset": offset,
         "facts": [
             {
                 "id": e.id,
@@ -264,7 +258,7 @@ def get_memory(n: int = 20):
                 "timestamp": e.timestamp.isoformat(),
                 "tags": e.tags,
             }
-            for e in memory.get_recent_facts(n=n)
+            for e in memory.get_recent_facts(n=limit)
         ],
         "stats": memory.stats(),
     }
@@ -292,11 +286,9 @@ def _clean_for_tts(text: str) -> str:
 def _find_ffplay() -> str | None:
     """Busca ffplay en PATH o en la ruta típica de WinGet, sin importar el usuario."""
     import shutil, glob
-    # 1. Intentar desde PATH (si el sistema lo tiene registrado)
     in_path = shutil.which("ffplay")
     if in_path:
         return in_path
-    # 2. Buscar en la carpeta de WinGet del usuario actual
     local = os.environ.get("LOCALAPPDATA", "")
     pattern = os.path.join(
         local,

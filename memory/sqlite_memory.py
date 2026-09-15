@@ -1,7 +1,8 @@
 # ================================================================
 # memory/sqlite_memory.py
 # Memoria de largo plazo — persiste entre sesiones usando SQLite.
-# Guarda preferencias, notas, hechos sobre el usuario y comandos frecuentes.
+# Guarda preferencias, notas, hechos sobre el usuario, comandos frecuentes
+# y el historial real de conversación (tabla conversation_log).
 # No requiere instalación extra (sqlite3 viene con Python).
 # ================================================================
 
@@ -16,7 +17,8 @@ from core.interfaces import MemoryProvider, MemoryEntry
 class SQLiteMemory(MemoryProvider):
     """
     Memoria persistente para información que Jarvis debe recordar
-    entre sesiones: preferencias, notas, recordatorios, hechos del usuario.
+    entre sesiones: preferencias, notas, recordatorios, hechos del usuario
+    y el historial completo de la conversación.
     """
 
     def __init__(self, db_path: str = "jarvis.db"):
@@ -40,7 +42,6 @@ class SQLiteMemory(MemoryProvider):
                     tags        TEXT NOT NULL DEFAULT '[]'
                 )
             """)
-            # Índice para búsqueda por contenido y por fecha
             conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_memories_timestamp
                 ON memories (timestamp DESC)
@@ -48,6 +49,20 @@ class SQLiteMemory(MemoryProvider):
             conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_memories_source
                 ON memories (source)
+            """)
+
+            # ── Historial real de conversación (persiste entre reinicios) ──
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS conversation_log (
+                    id        TEXT PRIMARY KEY,
+                    role      TEXT NOT NULL,
+                    content   TEXT NOT NULL,
+                    timestamp TEXT NOT NULL
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_conversation_timestamp
+                ON conversation_log (timestamp DESC)
             """)
             conn.commit()
 
@@ -96,6 +111,47 @@ class SQLiteMemory(MemoryProvider):
             ).fetchall()
         # Invertir para orden cronológico
         return [self._row_to_entry(r) for r in reversed(rows)]
+
+    # ─── Conversación (real, persistente) ─────────────────────
+
+    def save_conversation_message(self, role: str, content: str) -> None:
+        """Guarda un mensaje del chat en SQLite (no se pierde al reiniciar)."""
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO conversation_log (id, role, content, timestamp)
+                VALUES (?, ?, ?, ?)
+                """,
+                (str(uuid4()), role, content, datetime.utcnow().isoformat())
+            )
+            conn.commit()
+
+    def get_conversation_page(self, limit: int = 20, offset: int = 0) -> list[dict]:
+        """
+        Retorna una página del historial de conversación.
+        offset=0 → los más recientes. Resultado en orden cronológico ascendente.
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT role, content, timestamp FROM conversation_log
+                ORDER BY timestamp DESC
+                LIMIT ? OFFSET ?
+                """,
+                (limit, offset)
+            ).fetchall()
+        return [
+            {"role": r["role"], "content": r["content"], "timestamp": r["timestamp"]}
+            for r in reversed(rows)
+        ]
+
+    def count_conversation(self) -> int:
+        """Total de mensajes guardados en el historial persistente."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) as total FROM conversation_log"
+            ).fetchone()
+        return row["total"]
 
     # ─── Métodos extra (no en la interfaz base) ───────────────
 
