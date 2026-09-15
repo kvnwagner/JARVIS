@@ -35,6 +35,7 @@ HERRAMIENTAS DISPONIBLES:
 - spotify: para reproducir, poner o escuchar música en el computador. Parámetros: action=play y query=nombre de canción o artista. NUNCA uses action=search para reproducir.
 - open_app: para abrir aplicaciones del computador que NO sean el televisor.
 - screenshot: para tomar capturas de pantalla.
+- datetime: para saber la hora actual, la fecha actual o el día de la semana. Parámetro: query=time/date/weekday/all.
 
 REGLAS IMPORTANTES:
 - Usa una herramienta SOLO si el usuario pide una acción concreta.
@@ -42,6 +43,7 @@ REGLAS IMPORTANTES:
 - Para Spotify: "pon", "reproduce", "escucha", "pone", "dale play", "quero escuchar" → SIEMPRE usa la tool spotify con action=play y query=nombre de la canción.
 - Si el usuario dice solo "Spotify" sin más contexto → usa open_app con app=spotify.
 - Para correos: usa EXACTAMENTE el destinatario que menciona el usuario.
+- SIEMPRE usa datetime cuando pregunten la hora, la fecha o el día. NUNCA digas que no tienes acceso a la hora.
 
 HERRAMIENTAS DEL HOGAR (Home Assistant):
 - Luces → controlar_luz: entity_id, action (on/off), brightness opcional.
@@ -90,6 +92,7 @@ TOOL_CONFIRMATIONS = {
     "controlar_clima": lambda p: "Ajustando el clima",
     "ejecutar_escena": lambda p: "Activando la escena",
     "consultar_estado_hogar": lambda p: "Consultando el dispositivo",
+    "datetime": lambda p: "Consultando la hora",
 }
 
 
@@ -110,7 +113,7 @@ def build_llm(container: Container):
         "gpt-oss-120b",
         "llama3.1-8b",
     ]
-    GROQ_FALLBACK_MODEL = "llama-3.3-70b-versatile"
+    GROQ_FALLBACK_MODEL = "openai/gpt-oss-120b"
 
     if provider == "cerebras":
         if not cerebras_key:

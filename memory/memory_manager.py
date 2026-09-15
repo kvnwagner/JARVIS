@@ -15,8 +15,9 @@ from memory.sqlite_memory import SQLiteMemory
 class MemoryManager:
     """
     Orquesta los dos tipos de memoria:
-    - RAM:    historial de la conversación actual (volátil)
-    - SQLite: preferencias, notas y hechos persistentes
+    - RAM:    historial de la conversación actual (volátil, rápido)
+    - SQLite: preferencias, notas, hechos persistentes y el historial
+              REAL de conversación (sobrevive a reinicios)
     """
 
     def __init__(self, db_path: str = "jarvis.db", ram_limit: int = 100):
@@ -27,7 +28,8 @@ class MemoryManager:
 
     def save_message(self, content: str, source: str) -> MemoryEntry:
         """
-        Guarda un mensaje de la conversación en RAM.
+        Guarda un mensaje de la conversación en RAM (rápido) y también
+        en SQLite (persistente — sobrevive a reinicios del servidor).
         source: "user" | "assistant" | "tool"
         """
         entry = MemoryEntry(
@@ -38,6 +40,14 @@ class MemoryManager:
             tags=["conversacion"]
         )
         self.ram.save(entry)
+
+        role = "user" if source == "user" else "assistant"
+        try:
+            self.sqlite.save_conversation_message(role, content)
+        except Exception:
+            # Nunca tumbar el chat por un fallo de persistencia
+            pass
+
         return entry
 
     def save_fact(self, content: str, tags: list[str] = []) -> MemoryEntry:
@@ -66,10 +76,23 @@ class MemoryManager:
 
     def get_conversation_context(self, n: int = 20) -> list[dict]:
         """
-        Retorna el historial reciente en formato para el LLM.
+        Retorna el historial reciente EN RAM en formato para el LLM.
         [{"role": "user", "content": "..."}, ...]
+        Úsalo para armar el contexto que se manda al LLM (rápido, en memoria).
         """
         return self.ram.to_llm_context(n)
+
+    def get_conversation_page(self, limit: int = 20, offset: int = 0) -> list[dict]:
+        """
+        Retorna una página del historial REAL y persistente (SQLite).
+        offset=0 → los mensajes más recientes. Úsalo para poblar el
+        frontend, ya que sobrevive a reinicios del backend.
+        """
+        return self.sqlite.get_conversation_page(limit=limit, offset=offset)
+
+    def get_conversation_total(self) -> int:
+        """Total de mensajes guardados en el historial persistente."""
+        return self.sqlite.count_conversation()
 
     def get_preference(self, key: str) -> str | None:
         """Recupera una preferencia guardada."""
@@ -103,6 +126,7 @@ class MemoryManager:
     def stats(self) -> dict:
         """Retorna estadísticas de ambas memorias."""
         return {
-            "ram_entries":    self.ram.count(),
-            "sqlite_entries": self.sqlite.count(),
+            "ram_entries":         self.ram.count(),
+            "sqlite_entries":      self.sqlite.count(),
+            "conversation_total":  self.sqlite.count_conversation(),
         }

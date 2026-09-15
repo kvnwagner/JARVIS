@@ -17,6 +17,9 @@ from tools.external.spotify_tool import SpotifyTool
 from tools.external.reminder_tool import ReminderTool
 from tools.external.system_tool import SystemTool
 from tools.external.tasks_tool import TasksTool
+from tools.external.translate_tool import TranslateTool
+from tools.filesystem.files_tool import FilesTool
+from tools.browser.browser_history_tool import BrowserHistoryTool
 from tools.home_assistant.registry import HA_TOOLS
 
 
@@ -51,6 +54,11 @@ class Container:
         self.tool_registry.register(ReminderTool())
         self.tool_registry.register(SystemTool())
         self.tool_registry.register(TasksTool())
+        self.tool_registry.register(TranslateTool())
+
+        # 6b. Acceso al dispositivo — archivos personales e historial de navegación
+        self.tool_registry.register(FilesTool())
+        self.tool_registry.register(BrowserHistoryTool())
 
         # 7. Registrar herramientas de Home Assistant
         for tool in HA_TOOLS:

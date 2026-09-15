@@ -71,6 +71,51 @@ h1, h2, p { margin: 0; }
   text-shadow: 0 0 24px rgba(255,200,40,0.80);
 }
 
+/* ── ALERTAS PERSISTENTES (recordatorios) ── */
+.alerts-stack {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: min(420px, 90vw);
+  pointer-events: none;
+}
+.alert-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  border: 1px solid rgba(255,150,25,0.34);
+  background: rgba(10, 8, 2, 0.88);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 4px 18px rgba(0,0,0,0.35);
+  color: #ffe6bf;
+  font-size: 0.78rem;
+  pointer-events: auto;
+  animation: rise 180ms ease both;
+}
+.alert-banner svg { color: var(--amber); flex: none; }
+.alert-banner span { flex: 1; line-height: 1.35; }
+.alert-dismiss {
+  display: grid; place-items: center;
+  width: 20px; height: 20px; flex: none;
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.03);
+  color: rgba(255,230,190,0.65);
+  transition: all 120ms ease;
+}
+.alert-dismiss:hover {
+  border-color: rgba(255,74,110,0.45);
+  background: rgba(255,74,110,0.10);
+  color: var(--red);
+}
+
 /* ── SHELL — 2 columnas: sidebar + workspace ── */
 .shell {
   position: relative;
@@ -209,6 +254,25 @@ h2 { font-size: 1.02rem; font-weight: 700; color: #eef8ff; }
   display: flex; flex-direction: column; gap: 9px;
   padding: 12px 14px; overflow: auto; min-height: 0;
 }
+
+.load-more-btn {
+  align-self: center;
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 999px;
+  border: 1px solid rgba(255,150,25,0.28);
+  background: rgba(255,150,25,0.06);
+  color: rgba(255,200,140,0.80);
+  font-size: 0.72rem;
+  margin-bottom: 4px;
+  transition: all 120ms ease;
+}
+.load-more-btn:hover:not(:disabled) {
+  border-color: rgba(255,150,25,0.5);
+  background: rgba(255,150,25,0.12);
+  color: var(--amber);
+}
+.load-more-btn:disabled { opacity: 0.55; cursor: default; }
+.load-more-btn .spin { animation: spin 1s linear infinite; }
 
 .message {
   display: flex; align-items: flex-start; gap: 7px;

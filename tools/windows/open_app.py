@@ -1,7 +1,14 @@
 """
 Tool: open_app
 Abre una aplicación en Windows por nombre o un sitio web en el navegador.
-Usa rutas dinámicas — funciona en cualquier computador sin modificar nada.
+
+Estrategia de resolución (en orden):
+  1. Ruta conocida y fija (APP_ALIASES) — apps de escritorio comunes.
+  2. Búsqueda dinámica de apps instaladas vía Windows Store/UWP
+     (Get-StartApps) — detecta apps como TikTok, Netflix, Instagram, etc.
+     sin necesidad de conocer su ruta de antemano.
+  3. Alternativa web conocida (APP_WEB_FALLBACK) o URL directa —
+     si la app no está instalada, se abre su versión en el navegador.
 """
 
 import os
@@ -38,7 +45,7 @@ APP_ALIASES: dict[str, str] = {
     "taskmgr":            "taskmgr",
     "paint":              "mspaint",
 
-    # Sitios web
+    # Sitios web (apps sin versión de escritorio típica, o que preferimos en navegador)
     "youtube":            "https://www.youtube.com",
     "facebook":           "https://www.facebook.com",
     "instagram":          "https://www.instagram.com",
@@ -56,16 +63,55 @@ APP_ALIASES: dict[str, str] = {
     "linkedin":           "https://www.linkedin.com",
     "chatgpt":            "https://www.chatgpt.com",
     "claude":             "https://www.claude.ai",
+    "tiktok":             "https://www.tiktok.com",
 }
+
+# Alternativa web para apps que SÍ pueden estar instaladas como programa,
+# pero si no lo están, abrimos esto en vez de fallar.
+APP_WEB_FALLBACK: dict[str, str] = {
+    "tiktok":    "https://www.tiktok.com",
+    "discord":   "https://discord.com/app",
+    "telegram":  "https://web.telegram.org",
+    "spotify":   "https://open.spotify.com",
+    "steam":     "https://store.steampowered.com/",
+    "whatsapp":  "https://web.whatsapp.com",
+}
+
+
+def _find_uwp_app_id(name: str) -> str | None:
+    """
+    Busca, entre las apps instaladas de Windows (incluye apps de Store/UWP
+    como TikTok, Instagram, Netflix, etc.), una cuyo nombre contenga 'name'.
+    Retorna su AppID (usable con shell:AppsFolder\\<AppID>) o None si no
+    se encontró o si algo falló (timeout, PowerShell no disponible, etc.).
+    """
+    try:
+        safe_name = name.replace("'", "")
+        ps_cmd = (
+            "(Get-StartApps | Where-Object { $_.Name -like '*" + safe_name + "*' } "
+            "| Select-Object -First 1 -ExpandProperty AppID)"
+        )
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_cmd],
+            capture_output=True,
+            text=True,
+            timeout=8,
+        )
+        app_id = (result.stdout or "").strip()
+        return app_id or None
+    except Exception:
+        return None
 
 
 class OpenAppTool(Tool):
     name = "open_app"
     description = (
-        "Abre una aplicación de Windows o un sitio web en el navegador. "
+        "Abre una aplicación de Windows (incluso apps de Microsoft Store como TikTok) "
+        "o un sitio web en el navegador. Si la aplicación no está instalada, abre "
+        "automáticamente su versión web como alternativa. "
         "Usa esto cuando el usuario pida abrir, lanzar o iniciar cualquier programa, "
         "aplicación o sitio web como YouTube, Facebook, Instagram, Netflix, Gmail, "
-        "Spotify, Chrome, VSCode, Discord, Steam, etc."
+        "Spotify, Chrome, VSCode, Discord, Steam, TikTok, etc."
     )
     parameters_schema = {
         "type": "object",
@@ -74,7 +120,7 @@ class OpenAppTool(Tool):
                 "type": "string",
                 "description": (
                     "Nombre de la aplicación o sitio web a abrir. "
-                    "Ejemplos: spotify, chrome, youtube, facebook, instagram, netflix, gmail, discord"
+                    "Ejemplos: spotify, chrome, youtube, facebook, instagram, netflix, gmail, discord, tiktok"
                 )
             }
         },
@@ -86,29 +132,28 @@ class OpenAppTool(Tool):
         if not app_name:
             return ToolResult.fail("No se especificó ninguna aplicación.")
 
-        # Resolver alias
-        executable = APP_ALIASES.get(app_name, app_name)
+        executable = APP_ALIASES.get(app_name)
 
-        # ── URL → abrir en navegador ──────────────────────────────────────────
-        if executable.startswith("https://") or executable.startswith("http://"):
+        # ── 1) Alias conocido que ES una URL directa ────────────────────────
+        if executable and (executable.startswith("https://") or executable.startswith("http://")):
             try:
                 webbrowser.open(executable)
                 return ToolResult.ok(f"Abriendo {app_name} en el navegador.")
             except Exception as e:
                 return ToolResult.fail(f"Error al abrir {app_name}: {e}")
 
-        # ── WhatsApp (UWP) ───────────────────────────────────────────────────
+        # ── 2) WhatsApp (UWP con AppID fijo conocido) ───────────────────────
         if app_name == "whatsapp":
             try:
                 subprocess.Popen(
                     ["explorer.exe", "shell:AppsFolder\\5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App"]
                 )
                 return ToolResult.ok("WhatsApp abierto correctamente.")
-            except Exception as e:
-                return ToolResult.fail(f"Error al abrir WhatsApp: {e}")
+            except Exception:
+                pass  # si falla, seguimos con los siguientes niveles de fallback
 
-        # ── Shell apps genéricas ─────────────────────────────────────────────
-        if executable.startswith("shell:AppsFolder"):
+        # ── 3) Shell apps genéricas ya resueltas en el alias ────────────────
+        if executable and executable.startswith("shell:AppsFolder"):
             try:
                 subprocess.Popen(
                     f'explorer.exe "{executable}"',
@@ -116,10 +161,10 @@ class OpenAppTool(Tool):
                     creationflags=subprocess.DETACHED_PROCESS
                 )
                 return ToolResult.ok(f"Aplicación '{app_name}' abierta correctamente.")
-            except Exception as e:
-                return ToolResult.fail(f"Error al abrir '{app_name}': {e}")
+            except Exception:
+                pass
 
-        # ── Discord: usa el updater con --processStart ───────────────────────
+        # ── 4) Discord: usa el updater con --processStart ───────────────────
         if app_name == "discord":
             discord_path = os.path.join(LOCALAPPDATA, r"Discord\Update.exe")
             if os.path.isfile(discord_path):
@@ -129,28 +174,57 @@ class OpenAppTool(Tool):
                         creationflags=subprocess.DETACHED_PROCESS
                     )
                     return ToolResult.ok("Discord abierto correctamente.")
-                except Exception as e:
-                    return ToolResult.fail(f"Error al abrir Discord: {e}")
+                except Exception:
+                    pass  # seguimos con los siguientes niveles
 
-        # ── Verificar que el ejecutable existe (ruta absoluta o PATH) ────────
-        if not os.path.isfile(executable) and not shutil.which(executable):
-            # Último intento: buscar en PATH por si el usuario tiene la app instalada
-            in_path = shutil.which(app_name)
-            if in_path:
-                executable = in_path
-            else:
-                return ToolResult.fail(
-                    f"No se encontró '{app_name}' en el sistema. "
-                    f"Verifica que esté instalada o agrégala al PATH."
+        # ── 5) Ruta local conocida (o en PATH) que SÍ existe ────────────────
+        if executable and (os.path.isfile(executable) or shutil.which(executable)):
+            try:
+                subprocess.Popen(
+                    executable,
+                    shell=True,
+                    creationflags=subprocess.DETACHED_PROCESS
                 )
+                return ToolResult.ok(f"Aplicación '{app_name}' abierta correctamente.")
+            except Exception as e:
+                return ToolResult.fail(f"Error al abrir '{app_name}': {e}")
 
-        # ── Lanzar ejecutable ────────────────────────────────────────────────
-        try:
-            subprocess.Popen(
-                executable,
-                shell=True,
-                creationflags=subprocess.DETACHED_PROCESS
-            )
-            return ToolResult.ok(f"Aplicación '{app_name}' abierta correctamente.")
-        except Exception as e:
-            return ToolResult.fail(f"Error al abrir '{app_name}': {e}")
+        # ── 6) No estaba en la lista fija: buscar entre apps instaladas ─────
+        #      (Store/UWP) por nombre — detecta TikTok, Instagram, Netflix, etc.
+        #      sin necesidad de tener su ruta hardcodeada.
+        uwp_id = _find_uwp_app_id(app_name)
+        if uwp_id:
+            try:
+                subprocess.Popen(["explorer.exe", f"shell:AppsFolder\\{uwp_id}"])
+                return ToolResult.ok(f"Aplicación '{app_name}' abierta correctamente.")
+            except Exception:
+                pass  # si falla el lanzamiento, caemos al fallback web
+
+        # ── 7) No está instalada: abrir su alternativa web si la conocemos ──
+        web_url = APP_WEB_FALLBACK.get(app_name) or APP_ALIASES.get(app_name)
+        if web_url and (web_url.startswith("http://") or web_url.startswith("https://")):
+            try:
+                webbrowser.open(web_url)
+                return ToolResult.ok(
+                    f"'{app_name}' no está instalada en el equipo — la abrí en el navegador."
+                )
+            except Exception as e:
+                return ToolResult.fail(f"Error al abrir {app_name} en el navegador: {e}")
+
+        # ── 8) Último intento: nombre tal cual, directamente en PATH ────────
+        in_path = shutil.which(app_name)
+        if in_path:
+            try:
+                subprocess.Popen(
+                    in_path,
+                    shell=True,
+                    creationflags=subprocess.DETACHED_PROCESS
+                )
+                return ToolResult.ok(f"Aplicación '{app_name}' abierta correctamente.")
+            except Exception as e:
+                return ToolResult.fail(f"Error al abrir '{app_name}': {e}")
+
+        return ToolResult.fail(
+            f"No se encontró '{app_name}' instalada en el sistema, "
+            f"ni una alternativa web conocida para abrirla."
+        )
