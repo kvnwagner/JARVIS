@@ -43,6 +43,10 @@ class JarvisTTS:
             return True
         except ImportError:
             return False
+        
+    @property
+    def is_speaking(self) -> bool:
+            return self._playback_proc is not None and self._playback_proc.poll() is None
 
     def speak(self, text: str) -> None:
         if not self._enabled or not text or not text.strip():
