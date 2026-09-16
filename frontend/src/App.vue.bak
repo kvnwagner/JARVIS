@@ -1,4 +1,4 @@
-﻿<script setup>
+<script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
   Activity, Bell, Bot, BrainCircuit, History, LoaderCircle,
@@ -32,13 +32,13 @@ const voiceEnabled = ref(true);
 const coreState    = ref("idle");
 const canvasRef    = ref(null);
 
-// â”€â”€ Historial paginado (real, desde SQLite vÃ­a /memory) â”€â”€
+// ── Historial paginado (real, desde SQLite vía /memory) ──
 const historyOffset = ref(0);
 const historyTotal  = ref(0);
 const loadingMore   = ref(false);
 const historyReady  = ref(false);
 
-// â”€â”€ Alertas persistentes de recordatorios â”€â”€
+// ── Alertas persistentes de recordatorios ──
 const activeAlerts = ref([]);
 
 let animCtx = null;
@@ -59,10 +59,10 @@ const userCount      = computed(() => messages.value.filter(m => m.role === "use
 const assistantCount = computed(() => messages.value.filter(m => m.role === "assistant").length);
 const hasMoreHistory  = computed(() => historyOffset.value < historyTotal.value);
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-//  JARVIS CORE â€” Canvas 2D "Fractal Orbital City"
-//  (sin cambios respecto a la versiÃ³n anterior)
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ══════════════════════════════════════════════════════════════════
+//  JARVIS CORE — Canvas 2D "Fractal Orbital City"
+//  (sin cambios respecto a la versión anterior)
+// ══════════════════════════════════════════════════════════════════
 function initJarvisCore() {
   const canvas = canvasRef.value;
   if (!canvas) return;
@@ -366,7 +366,7 @@ function initJarvisCore() {
 
 watch(coreState, (val) => animCtx?.setState(val));
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────
 onMounted(async () => {
   await nextTick();
   initJarvisCore();
@@ -376,7 +376,7 @@ onMounted(async () => {
   connectWebSocket();
   startReminderPolling();
   setTimeout(() => {
-    speakText("Hola seÃ±or, Â¿cÃ³mo estÃ¡? Estoy listo para ayudarlo el dÃ­a de hoy.");
+    speakText("Hola señor, ¿cómo está? Estoy listo para ayudarlo el día de hoy.");
   }, 1500);
 });
 
@@ -407,7 +407,7 @@ async function refreshBackendState() {
   } catch (e) { health.value = { status: "offline", llm: "sin conexion", error: e.message }; }
 }
 
-// â”€â”€ Historial real y paginado desde SQLite (/memory) â”€â”€
+// ── Historial real y paginado desde SQLite (/memory) ──
 // offset=0 trae los mensajes mas recientes. Subir el offset trae
 // tandas mas antiguas ("cargar historial anterior").
 async function loadHistoryPage(initial = false) {
@@ -510,7 +510,7 @@ async function sendWithRest(text) {
   } catch (e) { finalizeStreamingMessage(`Error: ${e.message}`); }
 }
 
-// â”€â”€ Recordatorios: alerta persistente ademÃ¡s de la burbuja en chat â”€â”€
+// ── Recordatorios: alerta persistente además de la burbuja en chat ──
 function startReminderPolling() {
   const poll = async () => {
     try {
@@ -564,15 +564,9 @@ async function speakText(text) {
   setTimeout(() => { if (coreState.value === "speaking") coreState.value = "idle"; }, 4000);
 }
 
-async function toggleVoice() {
+function toggleVoice() {
   voiceEnabled.value = !voiceEnabled.value;
-  try {
-    await fetch(`${API_BASE}/tts/mute`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ muted: !voiceEnabled.value })
-    });
-  } catch (_) {}
+  if (!voiceEnabled.value) fetch(`${API_BASE}/tts/stop`, { method:"POST" }).catch(()=>{});
 }
 
 function clearHistory() {
@@ -587,14 +581,14 @@ function formatTime(v) { return new Intl.DateTimeFormat("es-CO", { hour:"2-digit
   <main class="shell">
     <div class="bg-scanlines"></div>
 
-    <!-- NÃšCLEO â€” canvas ocupa toda la pantalla de fondo -->
+    <!-- NÚCLEO — canvas ocupa toda la pantalla de fondo -->
     <canvas ref="canvasRef" class="jarvis-canvas"></canvas>
 
     <!-- HUD del estado -->
     <div class="core-hud" :class="coreState">
-      <span v-if="coreState === 'listening'">â—ˆ &nbsp;ESCUCHANDO</span>
-      <span v-else-if="coreState === 'speaking'">â—ˆ &nbsp;RESPONDIENDO</span>
-      <span v-else>J Â· A Â· R Â· V Â· I Â· S</span>
+      <span v-if="coreState === 'listening'">◈ &nbsp;ESCUCHANDO</span>
+      <span v-else-if="coreState === 'speaking'">◈ &nbsp;RESPONDIENDO</span>
+      <span v-else>J · A · R · V · I · S</span>
     </div>
 
     <!-- BANNER PERSISTENTE DE ALERTAS/RECORDATORIOS -->
@@ -638,7 +632,7 @@ function formatTime(v) { return new Intl.DateTimeFormat("es-CO", { hour:"2-digit
       </div>
     </aside>
 
-    <!-- WORKSPACE â€” transparente, el nÃºcleo se ve detrÃ¡s -->
+    <!-- WORKSPACE — transparente, el núcleo se ve detrás -->
     <section class="workspace">
       <header class="topbar">
         <div>
@@ -675,12 +669,12 @@ function formatTime(v) { return new Intl.DateTimeFormat("es-CO", { hour:"2-digit
             <p>{{ message.content }}</p>
             <div v-if="message.toolUsed" class="tool-badge"
               :class="{ 'tool-ok': message.toolSuccess, 'tool-fail': message.toolSuccess === false }">
-              <span>{{ message.toolSuccess ? 'âœ¦' : 'âœ•' }} {{ message.toolUsed }}</span>
+              <span>{{ message.toolSuccess ? '✦' : '✕' }} {{ message.toolUsed }}</span>
               <span v-if="message.toolOutput" class="tool-output">{{ message.toolOutput.slice(0,100) }}</span>
             </div>
           </div>
         </article>
-        <div v-if="typing" class="typing"><LoaderCircle :size="12" /><span>Procesando seÃ±al...</span></div>
+        <div v-if="typing" class="typing"><LoaderCircle :size="12" /><span>Procesando señal...</span></div>
       </div>
 
       <div v-else class="history-panel">

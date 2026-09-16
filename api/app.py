@@ -1,6 +1,6 @@
 # ================================================================
-# api/app.py — Versión completa con WebSocket, TTS, Recordatorios
-# e historial paginado desde SQLite
+# api/app.py — Versión completa con WebSocket, TTS, Recordatorios,
+# Mute/Stop de voz real, e historial paginado desde SQLite
 # ================================================================
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
@@ -11,6 +11,8 @@ import sys
 import os
 import asyncio
 import json
+import threading
+import subprocess
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -25,7 +27,7 @@ from tools.external.reminder_tool import init_reminders_table, get_pending_remin
 app = FastAPI(
     title="JARVIS API",
     description="API REST para el asistente Jarvis",
-    version="0.9.0"
+    version="0.9.1"
 )
 
 app.add_middleware(
@@ -46,6 +48,13 @@ messages_history: list[LLMMessage] = []
 
 # Lista de alertas pendientes para el frontend
 _pending_alerts: list[dict] = []
+
+# ─── Estado de voz (TTS) ───────────────────────────────────────
+# _current_tts_proc: proceso de ffplay actualmente reproduciendo (o None)
+# _tts_muted:        si está en True, Jarvis no reproduce nada nuevo
+_tts_lock = threading.Lock()
+_current_tts_proc: subprocess.Popen | None = None
+_tts_muted: bool = False
 
 # Prompt reducido a lo esencial — menos tokens por request, importante
 # para no chocar con los límites de tokens/minuto de Groq.
@@ -94,8 +103,6 @@ def startup():
 
         if provider == "cerebras":
             # ── Cerebras con fallback automático a Groq ──────────────
-            # Si Cerebras falla (sin créditos = 402, rate limit = 429,
-            # o cualquier otro error), cae solo a Groq sin tocar el .env.
             from llm import CerebrasProvider, GroqProvider
 
             cerebras_key = config.cerebras_api_key
@@ -175,6 +182,9 @@ class ExecuteResponse(BaseModel):
 class TTSRequest(BaseModel):
     text: str
 
+class MuteRequest(BaseModel):
+    muted: bool
+
 
 # ─── Helper LLM ──────────────────────────────────────────────
 
@@ -229,8 +239,6 @@ def _run_llm(user_message: str):
     bus.publish(Event(name=events.LLM_RESPONSE, payload={"text": reply}, source="api"))
 
     # Trim agresivo: system + últimos 6 mensajes.
-    # Antes se dejaba crecer hasta 20 (10 turnos) — eso multiplica los
-    # tokens por request y es lo que estaba disparando el rate-limit de Groq.
     if len(messages_history) > 10:
         messages_history[:] = [messages_history[0]] + messages_history[-6:]
 
@@ -349,7 +357,14 @@ def _find_ffplay() -> str | None:
 @app.post("/tts/speak")
 async def tts_speak(req: TTSRequest):
     """Sintetiza voz con edge-tts y reproduce con ffplay (ruta dinámica)."""
+    global _current_tts_proc
+
+    # Si está muteado, no reproducir nada
+    if _tts_muted:
+        return {"ok": False, "muted": True}
+
     async def _speak():
+        global _current_tts_proc
         try:
             import edge_tts, tempfile
             clean_text = _clean_for_tts(req.text.strip())
@@ -360,16 +375,27 @@ async def tts_speak(req: TTSRequest):
             tmp = tempfile.mktemp(suffix=".mp3")
             await tts.save(tmp)
 
+            # Pudo mutearse mientras se generaba el audio — no reproducir
+            if _tts_muted:
+                return
+
             ffplay = _find_ffplay()
             if not ffplay:
                 print("TTS error: ffplay no encontrado. Instala ffmpeg con: winget install Gyan.FFmpeg")
                 return
 
-            import subprocess
-            subprocess.Popen(
+            proc = subprocess.Popen(
                 [ffplay, "-nodisp", "-autoexit", "-loglevel", "quiet", tmp],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             )
+            with _tts_lock:
+                _current_tts_proc = proc
+
+            proc.wait()
+
+            with _tts_lock:
+                if _current_tts_proc is proc:
+                    _current_tts_proc = None
         except Exception as e:
             print(f"TTS error: {e}")
 
@@ -379,7 +405,43 @@ async def tts_speak(req: TTSRequest):
 
 @app.post("/tts/stop")
 def tts_stop():
+    """Corta la reproducción de voz actual (silencio puntual, no bloquea futuras)."""
+    global _current_tts_proc
+    with _tts_lock:
+        if _current_tts_proc and _current_tts_proc.poll() is None:
+            _current_tts_proc.terminate()
+        _current_tts_proc = None
     return {"ok": True}
+
+
+@app.post("/tts/mute")
+def tts_mute(req: MuteRequest):
+    """
+    Activa/desactiva el silencio de Jarvis.
+    Al mutear, corta inmediatamente cualquier audio en reproducción y
+    bloquea que se reproduzcan nuevos audios hasta que se desmute.
+    """
+    global _tts_muted, _current_tts_proc
+    _tts_muted = req.muted
+
+    if _tts_muted:
+        with _tts_lock:
+            if _current_tts_proc and _current_tts_proc.poll() is None:
+                _current_tts_proc.terminate()
+            _current_tts_proc = None
+
+    return {"ok": True, "muted": _tts_muted}
+
+
+@app.get("/tts/status")
+def tts_status():
+    """Estado actual de la voz — útil para sincronizar el botón del frontend."""
+    with _tts_lock:
+        speaking = _current_tts_proc is not None and _current_tts_proc.poll() is None
+    return {
+        "muted": _tts_muted,
+        "speaking": speaking,
+    }
 
 
 # ─── WebSocket ───────────────────────────────────────────────
