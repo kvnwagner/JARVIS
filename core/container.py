@@ -21,6 +21,7 @@ from tools.external.translate_tool import TranslateTool
 from tools.external.search_tool import SearchWebTool
 from tools.filesystem.files_tool import FilesTool
 from tools.browser.browser_history_tool import BrowserHistoryTool
+from tools.code.code_editor_tool import CodeEditorTool
 from tools.home_assistant.registry import HA_TOOLS
 
 
@@ -61,6 +62,10 @@ class Container:
         # 6b. Acceso al dispositivo — archivos personales e historial de navegación
         self.tool_registry.register(FilesTool())
         self.tool_registry.register(BrowserHistoryTool())
+
+        # 6c. Editor de código — leer/buscar/crear/editar/borrar archivos
+        #      de código y correr comandos permitidos (tests, git, etc.)
+        self.tool_registry.register(CodeEditorTool())
 
         # 7. Registrar herramientas de Home Assistant
         for tool in HA_TOOLS:

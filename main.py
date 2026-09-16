@@ -39,6 +39,7 @@ HERRAMIENTAS DISPONIBLES:
 - system: para consultar CPU, RAM, disco, IP, batería o WiFi. Parámetro: query=all/cpu/ram/disk/ip/processes/battery/wifi.
 - apps_abiertas: para saber qué ventanas o aplicaciones están abiertas ahora, o cuál está activa.
 - recientes: para saber qué documentos o archivos se abrieron más recientemente en Windows.
+- code: para leer, buscar, crear, editar o borrar archivos de código del proyecto, y correr tests o comandos permitidos (python, pytest, git, npm, etc.). Parámetro: action=list/read/search/write/edit/append/delete/run.
 
 REGLAS IMPORTANTES:
 - Usa una herramienta SOLO si el usuario pide una acción concreta.
@@ -47,6 +48,12 @@ REGLAS IMPORTANTES:
 - Si el usuario dice solo "Spotify" sin más contexto → usa open_app con app=spotify.
 - Para correos: usa EXACTAMENTE el destinatario que menciona el usuario.
 - SIEMPRE usa datetime cuando pregunten la hora, la fecha o el día. NUNCA digas que no tienes acceso a la hora.
+
+USO DE 'code' (editar y crear archivos de código):
+- Usa 'code' cuando el usuario pida modificar, crear, revisar o corregir código, buscar dónde está definida una función/clase, o correr tests/scripts del proyecto.
+- Antes de editar algo con action='edit', si no tienes el texto exacto del archivo en el contexto reciente, usa primero action='read' para verlo con números de línea — old_str debe coincidir EXACTAMENTE (incluyendo indentación).
+- 'write' sobre un archivo que ya existe y 'delete' requieren confirm=true. Si el usuario no lo ha confirmado explícitamente en su mensaje, pídele que confirme antes de repetir la llamada con confirm=true.
+- Para 'run', solo se permiten comandos python, pytest, pip, node, npm, npx o git; no ofrezcas ni intentes otros comandos.
 
 HERRAMIENTAS DEL HOGAR (Home Assistant):
 - Luces → controlar_luz: entity_id, action (on/off), brightness opcional.
@@ -75,6 +82,26 @@ TONO:
 - No expliques qué herramienta usaste a menos que el usuario lo pregunte.
 """.strip()
 
+
+def _code_confirmation(p: dict) -> str:
+    action = p.get("action", "")
+    if action == "read":
+        return f"Leyendo {p.get('path', 'el archivo')}"
+    if action == "search":
+        return f"Buscando '{p.get('query', '')}' en el código"
+    if action == "write":
+        return f"Escribiendo {p.get('path', 'el archivo')}"
+    if action == "edit":
+        return f"Editando {p.get('path', 'el archivo')}"
+    if action == "append":
+        return f"Agregando contenido a {p.get('path', 'el archivo')}"
+    if action == "delete":
+        return f"Eliminando {p.get('path', 'el archivo')}"
+    if action == "run":
+        return f"Ejecutando: {p.get('command', 'el comando')}"
+    return "Listando archivos de código"
+
+
 TOOL_CONFIRMATIONS = {
     "open_app": lambda p: f"Listo, abriendo {p.get('app', 'la aplicacion')}",
     "close_app": lambda p: f"Cerrando {p.get('app', 'la aplicacion')}",
@@ -99,6 +126,7 @@ TOOL_CONFIRMATIONS = {
     "system": lambda p: "Consultando el sistema",
     "apps_abiertas": lambda p: "Revisando ventanas abiertas",
     "recientes": lambda p: "Revisando archivos recientes",
+    "code": _code_confirmation,
 }
 
 
