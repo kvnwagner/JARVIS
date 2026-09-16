@@ -55,6 +55,7 @@ intención real del usuario aunque tenga errores ortográficos o jerga.
 
 Herramientas: weather, news, email, spotify (action=play+query),
 open_app (apps y sitios web: youtube/facebook/instagram/netflix/gmail/whatsapp),
+search_web (site+query: buscar algo DENTRO de un sitio, ej: "busca X en youtube"),
 screenshot, reminder (action=set/list/cancel), system, translate (text+target),
 files (action=search/list/read, solo carpetas personales del usuario),
 browser_history (historial de Chrome/Edge, opcional query),
@@ -62,8 +63,18 @@ controlar_luz, controlar_clima, controlar_tv, abrir_app_tv, buscar_youtube_tv,
 consultar_estado_hogar, ejecutar_escena.
 
 Reglas: usa open_app para "abre X" (apps o webs, NUNCA para el TV). Usa
-controlar_tv para el televisor. Para Spotify usa action=play. Para
-conversación general sin acción concreta, responde solo con texto.
+search_web cuando el usuario pida buscar algo específico dentro de un sitio
+(ej: "busca en youtube intro de junior h" → search_web site=youtube
+query="intro de junior h"; "busca audífonos en amazon" → search_web
+site=amazon query="audífonos"). Usa controlar_tv para el televisor. Para
+Spotify reproducir música usa la tool spotify con action=play, no search_web.
+Para conversación general sin acción concreta, responde solo con texto.
+
+Cuando una herramienta devuelva mucha información (listas, historial,
+noticias, archivos, etc.), muestra solo un resumen breve con lo más
+relevante (3-5 puntos como máximo). Nunca vuelques toda la salida cruda.
+Si hay más datos disponibles que no mostraste, termina preguntando si el
+usuario quiere ver la información completa.
 """.strip()
 
 
@@ -198,8 +209,12 @@ def _run_llm(user_message: str):
             LLMMessage(role="system", content=SYSTEM_PROMPT),
             LLMMessage(role="user", content=user_message),
             LLMMessage(role="user", content=(
-                f"La herramienta '{tool_name}' devolvió: {tool_output}. "
-                f"Responde al usuario en español natural y breve. No uses herramientas."
+                f"La herramienta '{tool_name}' devolvió este resultado:\n{tool_output}\n\n"
+                f"Responde al usuario en español, breve y organizado: solo los puntos "
+                f"clave (usa viñetas cortas si son varios ítems, no vuelques el resultado "
+                f"completo). Si hay más información de la que mostraste (más noticias, "
+                f"más archivos, más detalles, etc.), termina preguntando si quiere que se "
+                f"la muestres completa. No uses herramientas."
             )),
         ]
         final = llm.chat(interp, tools=None)

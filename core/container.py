@@ -18,6 +18,7 @@ from tools.external.reminder_tool import ReminderTool
 from tools.external.system_tool import SystemTool
 from tools.external.tasks_tool import TasksTool
 from tools.external.translate_tool import TranslateTool
+from tools.external.search_tool import SearchWebTool
 from tools.filesystem.files_tool import FilesTool
 from tools.browser.browser_history_tool import BrowserHistoryTool
 from tools.home_assistant.registry import HA_TOOLS
@@ -55,6 +56,7 @@ class Container:
         self.tool_registry.register(SystemTool())
         self.tool_registry.register(TasksTool())
         self.tool_registry.register(TranslateTool())
+        self.tool_registry.register(SearchWebTool())
 
         # 6b. Acceso al dispositivo — archivos personales e historial de navegación
         self.tool_registry.register(FilesTool())

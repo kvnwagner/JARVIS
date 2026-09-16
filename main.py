@@ -578,17 +578,17 @@ def main() -> None:
                 tool_output = result.output if result.success else f"Error: {result.error}"
 
                 interpretation_messages = [
-                    LLMMessage(role="system", content=SYSTEM_PROMPT),
-                    LLMMessage(role="user", content=user_input),
-                    LLMMessage(
-                        role="user",
-                        content=(
-                            f"La herramienta '{tool_name}' devolvió este resultado: {tool_output}. "
-                            f"Responde al usuario en español natural y amigable basándote en ese resultado. "
-                            f"No uses herramientas, solo responde con texto."
-                        )
-                    ),
-                ]
+    LLMMessage(role="system", content=SYSTEM_PROMPT),
+    LLMMessage(role="user", content=user_input),
+    LLMMessage(
+        role="user",
+        content=(
+            f"La herramienta '{tool_name}' devolvió este resultado: {tool_output}. "
+            f"Responde al usuario en español natural y amigable basándote en ese resultado. "
+            f"No uses herramientas, solo responde con texto."
+        )
+    ),
+]
                 final = llm.chat(interpretation_messages, tools=None)
                 answer = final.text or tool_output
                 messages.append(LLMMessage(role="assistant", content=answer))
