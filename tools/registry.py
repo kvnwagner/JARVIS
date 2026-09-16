@@ -5,6 +5,23 @@ from typing import Dict, List, Optional
 from core.interfaces import Event, EventBus, Tool, ToolResult
 from infrastructure import events
 
+from tools.windows.open_app import OpenAppTool
+from tools.windows.close_app import CloseAppTool
+from tools.windows.volume_control import VolumeControlTool
+from tools.windows.screenshot import ScreenshotTool
+from tools.windows.clipboard import ClipboardTool
+from tools.windows.apps_abiertas import OpenWindowsTool
+from tools.windows.recientes import RecentFilesTool
+
+WINDOWS_TOOLS = [
+    OpenAppTool(),
+    CloseAppTool(),
+    VolumeControlTool(),
+    ScreenshotTool(),
+    ClipboardTool(),
+    OpenWindowsTool(),
+    RecentFilesTool(),
+]
 
 class ToolRegistry:
     """Registro central de herramientas y unico punto de ejecucion."""

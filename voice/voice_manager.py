@@ -75,3 +75,7 @@ class VoiceManager:
     @property
     def stt_available(self) -> bool:
         return bool(self._stt and self._stt.available)
+
+    @property
+    def is_speaking(self) -> bool:
+        return bool(self._tts and self._tts.is_speaking)

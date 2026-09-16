@@ -36,6 +36,9 @@ HERRAMIENTAS DISPONIBLES:
 - open_app: para abrir aplicaciones del computador que NO sean el televisor.
 - screenshot: para tomar capturas de pantalla.
 - datetime: para saber la hora actual, la fecha actual o el día de la semana. Parámetro: query=time/date/weekday/all.
+- system: para consultar CPU, RAM, disco, IP, batería o WiFi. Parámetro: query=all/cpu/ram/disk/ip/processes/battery/wifi.
+- apps_abiertas: para saber qué ventanas o aplicaciones están abiertas ahora, o cuál está activa.
+- recientes: para saber qué documentos o archivos se abrieron más recientemente en Windows.
 
 REGLAS IMPORTANTES:
 - Usa una herramienta SOLO si el usuario pide una acción concreta.
@@ -93,6 +96,9 @@ TOOL_CONFIRMATIONS = {
     "ejecutar_escena": lambda p: "Activando la escena",
     "consultar_estado_hogar": lambda p: "Consultando el dispositivo",
     "datetime": lambda p: "Consultando la hora",
+    "system": lambda p: "Consultando el sistema",
+    "apps_abiertas": lambda p: "Revisando ventanas abiertas",
+    "recientes": lambda p: "Revisando archivos recientes",
 }
 
 
@@ -187,6 +193,52 @@ def build_voice():
         return None
 
 
+def build_wakeword(voice, bus: EventBus):
+    """
+    Arranca el detector local de 'Hey Jarvis' (sin nube). Requiere que la
+    voz (TTS/STT) esté disponible. Se usa para dos cosas:
+      1. Despertar a Jarvis y escuchar un comando por voz.
+      2. Interrumpir a Jarvis mientras está hablando, diciendo el wake
+         word de nuevo (reemplaza la necesidad de un modelo separado
+         para detectar la palabra "para").
+    """
+    if voice is None or not voice.stt_available:
+        print("Wake word: no disponible (requiere microfono)")
+        return None
+
+    try:
+        from voice import WakeWordDetector
+
+        def on_wake():
+            print("\nJarvis: (wake word detectada) — di tu comando.")
+            heard = voice.listen()
+            if heard:
+                print(f"Tu (voz, wake word): {heard}")
+                bus.publish(Event(
+                    name=events.USER_VOICE_INPUT,
+                    payload={"text": heard},
+                    source="wakeword",
+                ))
+            else:
+                print("Jarvis: No se escuchó nada.")
+
+        def on_interrupt():
+            voice.stop_speaking()
+            print("\nJarvis: (interrumpido por wake word)")
+
+        detector = WakeWordDetector(
+            on_wake=on_wake,
+            is_speaking=lambda: voice.is_speaking,
+            on_interrupt=on_interrupt,
+        )
+        detector.start()
+        print("Wake word: 'Hey Jarvis' activo (di el wake word de nuevo mientras habla para interrumpirlo)")
+        return detector
+    except Exception as exc:
+        print(f"Wake word: no disponible ({exc})")
+        return None
+
+
 def _toggle_pause(voice) -> None:
     """Pausa o reanuda el TTS si está disponible."""
     tts = getattr(voice, "tts", None)
@@ -239,6 +291,8 @@ def main() -> None:
         return
 
     voice = build_voice()
+    wakeword = build_wakeword(voice, bus)
+
     print(f"Tools registradas: {len(registry.get_all())}\n")
     print("Comandos: m=microfono | p=pausar/reanudar voz | voz on/off | salir\n")
 
@@ -247,313 +301,317 @@ def main() -> None:
 
     messages = [LLMMessage(role="system", content=SYSTEM_PROMPT)]
 
-    while True:
-        try:
-            user_input, input_source = read_user_input(voice)
-        except KeyboardInterrupt:
-            if voice:
-                voice.speak("Hasta luego.")
-            print("\nHasta luego.")
-            break
-
-        if user_input.lower() in ["salir", "exit", "quit"]:
-            if voice:
-                voice.speak("Hasta luego.")
-            break
-        if not user_input:
-            continue
-        if user_input.lower() == "voz off" and voice:
-            voice.toggle_voice()
-            print("Jarvis: Voz desactivada.")
-            continue
-        if user_input.lower() == "voz on" and voice:
-            voice.toggle_voice()
-            print("Jarvis: Voz activada.")
-            continue
-
-        txt_low = user_input.lower()
-
-        if txt_low in ["hora de trabajar", "modo trabajo"]:
-            import subprocess
-
-            apps = [
-                r"C:\Users\qandr\AppData\Local\Programs\Microsoft VS Code\Code.exe",
-                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-                "spotify"
-            ]
-
-            for app in apps:
-                try:
-                    subprocess.Popen(app, shell=True)
-                except Exception as e:
-                    print(f"Error abriendo {app}: {e}")
-
-            resp = "Iniciando modo trabajo."
-            print(f"Jarvis: {resp}")
-
-            if voice:
-                voice.speak_async(resp)
-
-            continue
-
-        if txt_low in ["abre whatsapp", "abrir whatsapp"]:
-            import subprocess
-
-            subprocess.Popen(
-                ["explorer.exe", r"shell:AppsFolder\5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App"]
-            )
-
-            resp = "Abriendo WhatsApp."
-            print(f"Jarvis: {resp}")
-
-            if voice:
-                voice.speak_async(resp)
-
-            continue
-
-        if txt_low in ["abre chrome", "abrir chrome"]:
-            import subprocess
-
-            subprocess.Popen(
-                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-                shell=True
-            )
-
-            resp = "Abriendo Chrome."
-            print(f"Jarvis: {resp}")
-
-            if voice:
-                voice.speak_async(resp)
-
-            continue
-
-        if txt_low == "abre documentos":
-            import os
-            os.startfile(r"C:\Users\qandr\Documents")
-            continue
-
-        if txt_low == "abre descargas":
-            import os
-            os.startfile(r"C:\Users\qandr\Downloads")
-            continue
-
-        if txt_low == "abre escritorio":
-            import os
-            os.startfile(r"C:\Users\qandr\Desktop")
-            continue
-
-        if txt_low == "abre jarvis":
-            import os
-            os.startfile(r"C:\Users\qandr\OneDrive\Desktop\JARVIS")
-            continue
-
-        if txt_low == "abre facebook":
-            import webbrowser
-            webbrowser.open("https://facebook.com")
-            continue
+    try:
+        while True:
+            try:
+                user_input, input_source = read_user_input(voice)
+            except KeyboardInterrupt:
+                if voice:
+                    voice.speak("Hasta luego.")
+                print("\nHasta luego.")
+                break
+
+            if user_input.lower() in ["salir", "exit", "quit"]:
+                if voice:
+                    voice.speak("Hasta luego.")
+                break
+            if not user_input:
+                continue
+            if user_input.lower() == "voz off" and voice:
+                voice.toggle_voice()
+                print("Jarvis: Voz desactivada.")
+                continue
+            if user_input.lower() == "voz on" and voice:
+                voice.toggle_voice()
+                print("Jarvis: Voz activada.")
+                continue
+
+            txt_low = user_input.lower()
+
+            if txt_low in ["hora de trabajar", "modo trabajo"]:
+                import subprocess
+
+                apps = [
+                    r"C:\Users\qandr\AppData\Local\Programs\Microsoft VS Code\Code.exe",
+                    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                    "spotify"
+                ]
+
+                for app in apps:
+                    try:
+                        subprocess.Popen(app, shell=True)
+                    except Exception as e:
+                        print(f"Error abriendo {app}: {e}")
+
+                resp = "Iniciando modo trabajo."
+                print(f"Jarvis: {resp}")
+
+                if voice:
+                    voice.speak_async(resp)
+
+                continue
+
+            if txt_low in ["abre whatsapp", "abrir whatsapp"]:
+                import subprocess
+
+                subprocess.Popen(
+                    ["explorer.exe", r"shell:AppsFolder\5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App"]
+                )
+
+                resp = "Abriendo WhatsApp."
+                print(f"Jarvis: {resp}")
+
+                if voice:
+                    voice.speak_async(resp)
+
+                continue
+
+            if txt_low in ["abre chrome", "abrir chrome"]:
+                import subprocess
+
+                subprocess.Popen(
+                    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                    shell=True
+                )
+
+                resp = "Abriendo Chrome."
+                print(f"Jarvis: {resp}")
+
+                if voice:
+                    voice.speak_async(resp)
+
+                continue
+
+            if txt_low == "abre documentos":
+                import os
+                os.startfile(r"C:\Users\qandr\Documents")
+                continue
+
+            if txt_low == "abre descargas":
+                import os
+                os.startfile(r"C:\Users\qandr\Downloads")
+                continue
+
+            if txt_low == "abre escritorio":
+                import os
+                os.startfile(r"C:\Users\qandr\Desktop")
+                continue
+
+            if txt_low == "abre jarvis":
+                import os
+                os.startfile(r"C:\Users\qandr\OneDrive\Desktop\JARVIS")
+                continue
+
+            if txt_low == "abre facebook":
+                import webbrowser
+                webbrowser.open("https://facebook.com")
+                continue
 
-        if txt_low == "abre youtube":
-            import webbrowser
-            webbrowser.open("https://youtube.com")
-            continue
+            if txt_low == "abre youtube":
+                import webbrowser
+                webbrowser.open("https://youtube.com")
+                continue
 
-        if txt_low == "abre gmail":
-            import webbrowser
-            webbrowser.open("https://mail.google.com")
-            continue
+            if txt_low == "abre gmail":
+                import webbrowser
+                webbrowser.open("https://mail.google.com")
+                continue
 
-        if txt_low == "abre instagram":
-            import webbrowser
-            webbrowser.open("https://instagram.com")
-            continue
+            if txt_low == "abre instagram":
+                import webbrowser
+                webbrowser.open("https://instagram.com")
+                continue
 
-        if txt_low.startswith("busca "):
-            import webbrowser
-            import urllib.parse
+            if txt_low.startswith("busca "):
+                import webbrowser
+                import urllib.parse
 
-            query = user_input[6:].strip()
-            url = "https://www.google.com/search?q=" + urllib.parse.quote(query)
-            webbrowser.open(url)
+                query = user_input[6:].strip()
+                url = "https://www.google.com/search?q=" + urllib.parse.quote(query)
+                webbrowser.open(url)
 
-            resp = f"Buscando {query}"
-            print(f"Jarvis: {resp}")
+                resp = f"Buscando {query}"
+                print(f"Jarvis: {resp}")
 
-            if voice:
-                voice.speak_async(resp)
+                if voice:
+                    voice.speak_async(resp)
 
-            continue
+                continue
 
-        if txt_low.startswith("buscar "):
-            import webbrowser
-            import urllib.parse
+            if txt_low.startswith("buscar "):
+                import webbrowser
+                import urllib.parse
 
-            query = user_input[7:].strip()
-            url = "https://www.google.com/search?q=" + urllib.parse.quote(query)
-            webbrowser.open(url)
+                query = user_input[7:].strip()
+                url = "https://www.google.com/search?q=" + urllib.parse.quote(query)
+                webbrowser.open(url)
 
-            resp = f"Buscando {query}"
-            print(f"Jarvis: {resp}")
+                resp = f"Buscando {query}"
+                print(f"Jarvis: {resp}")
 
-            if voice:
-                voice.speak_async(resp)
+                if voice:
+                    voice.speak_async(resp)
 
-            continue
+                continue
 
-        # Plataformas de streaming -> PC por defecto
+            # Plataformas de streaming -> PC por defecto
 
-        if txt_low == "abre disney":
-            import webbrowser
-            webbrowser.open("https://www.disneyplus.com")
-            continue
+            if txt_low == "abre disney":
+                import webbrowser
+                webbrowser.open("https://www.disneyplus.com")
+                continue
 
-        if txt_low == "abre netflix":
-            import webbrowser
-            webbrowser.open("https://www.netflix.com")
-            continue
+            if txt_low == "abre netflix":
+                import webbrowser
+                webbrowser.open("https://www.netflix.com")
+                continue
 
-        if txt_low == "abre prime video":
-            import webbrowser
-            webbrowser.open("https://www.primevideo.com")
-            continue
+            if txt_low == "abre prime video":
+                import webbrowser
+                webbrowser.open("https://www.primevideo.com")
+                continue
 
-        # Solo TV si se especifica explicitamente
+            # Solo TV si se especifica explicitamente
 
-        if "en el televisor" in txt_low or "en la tv" in txt_low:
-            print("Jarvis: Ejecutando comando para el televisor")
-            continue
+            if "en el televisor" in txt_low or "en la tv" in txt_low:
+                print("Jarvis: Ejecutando comando para el televisor")
+                continue
 
-        if txt_low.startswith("youtube "):
-            import webbrowser
-            import urllib.parse
+            if txt_low.startswith("youtube "):
+                import webbrowser
+                import urllib.parse
 
-            query = user_input[8:].strip()
-            webbrowser.open(
-                "https://www.youtube.com/results?search_query="
-                + urllib.parse.quote(query)
-            )
-            continue
+                query = user_input[8:].strip()
+                webbrowser.open(
+                    "https://www.youtube.com/results?search_query="
+                    + urllib.parse.quote(query)
+                )
+                continue
 
-        if txt_low == "apaga el computador":
-            import os
-            os.system("shutdown /s /t 30")
-
-            resp = "El computador se apagará en 30 segundos"
-            print(f"Jarvis: {resp}")
-
-            if voice:
-                voice.speak_async(resp)
-
-            continue
-
-        if txt_low == "cancelar apagado":
-            import os
-            os.system("shutdown /a")
-
-            resp = "Apagado cancelado"
-            print(f"Jarvis: {resp}")
-
-            if voice:
-                voice.speak_async(resp)
-
-            continue
-
-        if txt_low == "bloquea el computador":
-            import os
-            os.system("rundll32.exe user32.dll,LockWorkStation")
-            continue
-
-        if txt_low == "reinicia el computador":
-            import os
-            os.system("shutdown /r /t 30")
-
-            resp = "El computador se reiniciará en 30 segundos"
-            print(f"Jarvis: {resp}")
-
-            if voice:
-                voice.speak_async(resp)
-
-            continue
-
-        if txt_low == "suspende el computador":
-            import os
-            os.system("rundll32.exe powrprof.dll,SetSuspendState 0,1,0")
-            continue
-
-        if txt_low.startswith("crea carpeta "):
-            from pathlib import Path
-
-            nombre = user_input[13:].strip()
-            ruta = Path.home() / "Desktop" / nombre
-            ruta.mkdir(parents=True, exist_ok=True)
-
-            resp = f"Carpeta creada: {nombre}"
-            print(f"Jarvis: {resp}")
-
-            if voice:
-                voice.speak_async(resp)
-
-            continue
-
-        # ── LLM ──────────────────────────────────────────────────────────
-
-        event_name = events.USER_VOICE_INPUT if input_source == "voice" else events.USER_MESSAGE
-        bus.publish(Event(name=event_name, payload={"text": user_input}, source="cli"))
-        messages.append(LLMMessage(role="user", content=user_input))
-
-        response = llm.chat(messages, tools=registry.get_all())
-
-        if response.error:
-            bus.publish(Event(name=events.LLM_ERROR, payload={"error": response.error}, source="llm"))
-            print(f"Jarvis: Error — {response.error}")
-            if voice:
-                voice.speak_async("Hubo un error, intenta de nuevo.")
-            continue
-
-        if response.tool_call:
-            tool_name = response.tool_call.get("tool", "")
-            params = response.tool_call.get("params", {})
-            confirmation = get_confirmation(tool_name, params)
-            print(f"Jarvis: {confirmation}")
-            if voice:
-                voice.speak_async(confirmation)
-
-            print(f"Tool elegida: {tool_name}({params})")
-            result = registry.execute(tool_name, params)
-            bus.publish(Event(name=events.LLM_TOOL_CALL, payload=response.tool_call, source="llm"))
-            tool_output = result.output if result.success else f"Error: {result.error}"
-
-            interpretation_messages = [
-                LLMMessage(role="system", content=SYSTEM_PROMPT),
-                LLMMessage(role="user", content=user_input),
-                LLMMessage(
-                    role="user",
-                    content=(
-                        f"La herramienta '{tool_name}' devolvió este resultado: {tool_output}. "
-                        f"Responde al usuario en español natural y amigable basándote en ese resultado. "
-                        f"No uses herramientas, solo responde con texto."
-                    )
-                ),
-            ]
-            final = llm.chat(interpretation_messages, tools=None)
-            answer = final.text or tool_output
-            messages.append(LLMMessage(role="assistant", content=answer))
-            bus.publish(Event(name=events.LLM_RESPONSE, payload={"text": answer}, source="llm"))
-            print(f"Jarvis: {answer}")
-            if voice:
-                voice.speak_async(answer)
-
-        elif response.text:
-            messages.append(LLMMessage(role="assistant", content=response.text))
-            bus.publish(Event(name=events.LLM_RESPONSE, payload={"text": response.text}, source="llm"))
-            print(f"Jarvis: {response.text}")
-            if voice:
-                voice.speak_async(response.text)
-
-        else:
-            print("Jarvis: No recibí texto ni llamada a herramienta del LLM.")
-
-        if len(messages) > 7:
-            messages = [messages[0]] + messages[-6:]
+            if txt_low == "apaga el computador":
+                import os
+                os.system("shutdown /s /t 30")
+
+                resp = "El computador se apagará en 30 segundos"
+                print(f"Jarvis: {resp}")
+
+                if voice:
+                    voice.speak_async(resp)
+
+                continue
+
+            if txt_low == "cancelar apagado":
+                import os
+                os.system("shutdown /a")
+
+                resp = "Apagado cancelado"
+                print(f"Jarvis: {resp}")
+
+                if voice:
+                    voice.speak_async(resp)
+
+                continue
+
+            if txt_low == "bloquea el computador":
+                import os
+                os.system("rundll32.exe user32.dll,LockWorkStation")
+                continue
+
+            if txt_low == "reinicia el computador":
+                import os
+                os.system("shutdown /r /t 30")
+
+                resp = "El computador se reiniciará en 30 segundos"
+                print(f"Jarvis: {resp}")
+
+                if voice:
+                    voice.speak_async(resp)
+
+                continue
+
+            if txt_low == "suspende el computador":
+                import os
+                os.system("rundll32.exe powrprof.dll,SetSuspendState 0,1,0")
+                continue
+
+            if txt_low.startswith("crea carpeta "):
+                from pathlib import Path
+
+                nombre = user_input[13:].strip()
+                ruta = Path.home() / "Desktop" / nombre
+                ruta.mkdir(parents=True, exist_ok=True)
+
+                resp = f"Carpeta creada: {nombre}"
+                print(f"Jarvis: {resp}")
+
+                if voice:
+                    voice.speak_async(resp)
+
+                continue
+
+            # ── LLM ──────────────────────────────────────────────────────────
+
+            event_name = events.USER_VOICE_INPUT if input_source == "voice" else events.USER_MESSAGE
+            bus.publish(Event(name=event_name, payload={"text": user_input}, source="cli"))
+            messages.append(LLMMessage(role="user", content=user_input))
+
+            response = llm.chat(messages, tools=registry.get_all())
+
+            if response.error:
+                bus.publish(Event(name=events.LLM_ERROR, payload={"error": response.error}, source="llm"))
+                print(f"Jarvis: Error — {response.error}")
+                if voice:
+                    voice.speak_async("Hubo un error, intenta de nuevo.")
+                continue
+
+            if response.tool_call:
+                tool_name = response.tool_call.get("tool", "")
+                params = response.tool_call.get("params", {})
+                confirmation = get_confirmation(tool_name, params)
+                print(f"Jarvis: {confirmation}")
+                if voice:
+                    voice.speak_async(confirmation)
+
+                print(f"Tool elegida: {tool_name}({params})")
+                result = registry.execute(tool_name, params)
+                bus.publish(Event(name=events.LLM_TOOL_CALL, payload=response.tool_call, source="llm"))
+                tool_output = result.output if result.success else f"Error: {result.error}"
+
+                interpretation_messages = [
+                    LLMMessage(role="system", content=SYSTEM_PROMPT),
+                    LLMMessage(role="user", content=user_input),
+                    LLMMessage(
+                        role="user",
+                        content=(
+                            f"La herramienta '{tool_name}' devolvió este resultado: {tool_output}. "
+                            f"Responde al usuario en español natural y amigable basándote en ese resultado. "
+                            f"No uses herramientas, solo responde con texto."
+                        )
+                    ),
+                ]
+                final = llm.chat(interpretation_messages, tools=None)
+                answer = final.text or tool_output
+                messages.append(LLMMessage(role="assistant", content=answer))
+                bus.publish(Event(name=events.LLM_RESPONSE, payload={"text": answer}, source="llm"))
+                print(f"Jarvis: {answer}")
+                if voice:
+                    voice.speak_async(answer)
+
+            elif response.text:
+                messages.append(LLMMessage(role="assistant", content=response.text))
+                bus.publish(Event(name=events.LLM_RESPONSE, payload={"text": response.text}, source="llm"))
+                print(f"Jarvis: {response.text}")
+                if voice:
+                    voice.speak_async(response.text)
+
+            else:
+                print("Jarvis: No recibí texto ni llamada a herramienta del LLM.")
+
+            if len(messages) > 7:
+                messages = [messages[0]] + messages[-6:]
+    finally:
+        if wakeword:
+            wakeword.stop()
 
 
 if __name__ == "__main__":
