@@ -38,6 +38,11 @@ class VoiceManager:
             "ok" if self.stt_available else "no disponible",
         )
 
+    @property
+    def tts(self) -> Optional[JarvisTTS]:
+        """Acceso directo al motor TTS (None si no está disponible). Usado por main.py para pausar/reanudar."""
+        return self._tts
+
     def speak(self, text: str) -> None:
         if self._tts and self._tts.available:
             self._tts.speak(text)
