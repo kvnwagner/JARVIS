@@ -26,6 +26,7 @@ class JarvisTTS:
         self._pause_event = threading.Event()
         self._pause_event.set()  # inicia sin pausa
         self._playback_proc: subprocess.Popen | None = None
+        self._control_path: str | None = None
 
         try:
             import edge_tts  # noqa: F401
@@ -43,10 +44,10 @@ class JarvisTTS:
             return True
         except ImportError:
             return False
-        
+
     @property
     def is_speaking(self) -> bool:
-            return self._playback_proc is not None and self._playback_proc.poll() is None
+        return self._playback_proc is not None and self._playback_proc.poll() is None
 
     def speak(self, text: str) -> None:
         if not self._enabled or not text or not text.strip():
@@ -57,8 +58,6 @@ class JarvisTTS:
                 import edge_tts
 
                 mp3_path = os.path.join(tempfile.gettempdir(), "jarvis_tts.mp3")
-
-                # Velocidad original + 25% → rate="+25%"
                 rate_str = "+25%"
 
                 async def generate_audio() -> None:
@@ -75,6 +74,8 @@ class JarvisTTS:
                 finally:
                     loop.close()
 
+                self._paused = False
+                self._pause_event.set()
                 self._play_mp3(mp3_path)
             except Exception as exc:
                 logger.error("Error en TTS: %s", exc)
@@ -83,20 +84,21 @@ class JarvisTTS:
         thread = threading.Thread(target=self.speak, args=(text,), daemon=True)
         thread.start()
 
+    def _write_control(self, cmd: str) -> None:
+        if not self._control_path:
+            return
+        try:
+            with open(self._control_path, "w", encoding="utf-8") as f:
+                f.write(cmd)
+        except Exception as exc:
+            logger.error("Error escribiendo control TTS: %s", exc)
+
     def pause(self) -> None:
-        """Pausa la reproducción actual."""
-        if not self._paused:
+        """Pausa la reproducción actual (real: llama $player.Pause() vía archivo de control)."""
+        if not self._paused and self.is_speaking:
             self._paused = True
             self._pause_event.clear()
-            if self._playback_proc and self._playback_proc.poll() is None:
-                # Suspende el proceso de PowerShell en Windows
-                subprocess.run(
-                    ["powershell", "-NoProfile", "-NonInteractive", "-Command",
-                     f"Suspend-Process -Id {self._playback_proc.pid} -ErrorAction SilentlyContinue"],
-                    capture_output=True,
-                    timeout=5,
-                    check=False,
-                )
+            self._write_control("PAUSE")
             logger.info("TTS pausado")
 
     def resume(self) -> None:
@@ -104,14 +106,7 @@ class JarvisTTS:
         if self._paused:
             self._paused = False
             self._pause_event.set()
-            if self._playback_proc and self._playback_proc.poll() is None:
-                subprocess.run(
-                    ["powershell", "-NoProfile", "-NonInteractive", "-Command",
-                     f"Resume-Process -Id {self._playback_proc.pid} -ErrorAction SilentlyContinue"],
-                    capture_output=True,
-                    timeout=5,
-                    check=False,
-                )
+            self._write_control("PLAY")
             logger.info("TTS reanudado")
 
     def toggle_pause(self) -> bool:
@@ -126,6 +121,7 @@ class JarvisTTS:
         """Detiene la reproducción completamente."""
         self._paused = False
         self._pause_event.set()
+        self._write_control("STOP")
         if self._playback_proc and self._playback_proc.poll() is None:
             self._playback_proc.terminate()
 
@@ -134,22 +130,49 @@ class JarvisTTS:
         return self._enabled
 
     def _play_mp3(self, mp3_path: str) -> None:
+        control_path = os.path.join(tempfile.gettempdir(), "jarvis_tts_control.txt")
+        with open(control_path, "w", encoding="utf-8") as f:
+            f.write("PLAY")
+        self._control_path = control_path
+
         ps_script = f"""
 Add-Type -AssemblyName PresentationCore
 $player = New-Object System.Windows.Media.MediaPlayer
 $player.Open([System.Uri]::new('{mp3_path}'))
+$controlPath = '{control_path}'
 $player.Play()
-Start-Sleep -Milliseconds 500
-$dur = 0
+$isPaused = $false
 $waited = 0
 while ($player.NaturalDuration.HasTimeSpan -eq $false -and $waited -lt 10) {{
     Start-Sleep -Milliseconds 100
     $waited++
 }}
+$dur = 1
 if ($player.NaturalDuration.HasTimeSpan) {{
     $dur = $player.NaturalDuration.TimeSpan.TotalSeconds
 }}
-Start-Sleep -Seconds ([Math]::Max($dur, 1) + 0.3)
+while ($true) {{
+    Start-Sleep -Milliseconds 150
+    $cmd = "PLAY"
+    try {{ $cmd = (Get-Content -Path $controlPath -ErrorAction Stop -Raw).Trim() }} catch {{}}
+
+    if ($cmd -eq "STOP") {{
+        $player.Stop()
+        break
+    }}
+    elseif ($cmd -eq "PAUSE" -and -not $isPaused) {{
+        $player.Pause()
+        $isPaused = $true
+    }}
+    elseif ($cmd -eq "PLAY" -and $isPaused) {{
+        $player.Play()
+        $isPaused = $false
+    }}
+
+    if (-not $isPaused -and $player.Position.TotalSeconds -ge ($dur - 0.15)) {{
+        break
+    }}
+}}
 $player.Close()
 """
         self._playback_proc = subprocess.Popen(

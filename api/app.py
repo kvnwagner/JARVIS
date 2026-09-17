@@ -402,7 +402,11 @@ async def tts_speak(req: TTSRequest):
             with _tts_lock:
                 _current_tts_proc = proc
 
-            proc.wait()
+            # OJO: proc.wait() bloquea — nunca llamarlo directo dentro de un
+            # async def, o congela TODO el event loop de FastAPI (mute, chat,
+            # websocket, etc. quedan colgados hasta que el audio termine solo).
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, proc.wait)
 
             with _tts_lock:
                 if _current_tts_proc is proc:
